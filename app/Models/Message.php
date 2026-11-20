@@ -93,11 +93,31 @@ class Message extends Model
             return null;
         }
 
-        if (str_starts_with($this->attachment_url, 'http://') || str_starts_with($this->attachment_url, 'https://')) {
-            return $this->attachment_url;
+        $url = $this->attachment_url;
+        $requestHost = null;
+        try {
+            if (request()->hasHeader('Host')) {
+                $requestHost = request()->schemeAndHttpHost();
+            }
+        } catch (\Throwable) {}
+
+        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
+            if ($requestHost && preg_match('#^https?://(127\.0\.0\.1|localhost)(:\d+)?(/storage/.*)$#i', $url, $matches)) {
+                return $requestHost . $matches[3];
+            }
+            return $url;
         }
 
-        return Storage::disk('public')->url($this->attachment_url);
+        $path = ltrim($url, '/');
+        if (str_starts_with($path, 'storage/')) {
+            $path = substr($path, 8);
+        }
+
+        if ($requestHost) {
+            return $requestHost . '/storage/' . $path;
+        }
+
+        return Storage::disk('public')->url($path);
     }
 
     public function starredBy(): \Illuminate\Database\Eloquent\Relations\BelongsToMany

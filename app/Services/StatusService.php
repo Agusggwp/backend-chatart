@@ -8,6 +8,7 @@ use App\Models\StatusView;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -83,7 +84,7 @@ class StatusService
 
         $status->load('user.presence');
 
-        event(new StatusCreated($status));
+        $this->safeBroadcast(new StatusCreated($status));
 
         return $status;
     }
@@ -143,5 +144,17 @@ class StatusService
         }
 
         return (bool) $status->delete();
+    }
+
+    /**
+     * Broadcast an event safely without throwing an exception if the WebSocket daemon is unreachable.
+     */
+    private function safeBroadcast(object $event): void
+    {
+        try {
+            broadcast($event)->toOthers();
+        } catch (\Throwable $e) {
+            Log::warning('Status broadcast via Reverb/Pusher gagal dikirim: ' . $e->getMessage());
+        }
     }
 }

@@ -69,11 +69,31 @@ class User extends Authenticatable
             return null;
         }
 
-        if (str_starts_with($this->avatar, 'http://') || str_starts_with($this->avatar, 'https://')) {
-            return $this->avatar;
+        $url = $this->avatar;
+        $requestHost = null;
+        try {
+            if (request()->hasHeader('Host')) {
+                $requestHost = request()->schemeAndHttpHost();
+            }
+        } catch (\Throwable) {}
+
+        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
+            if ($requestHost && preg_match('#^https?://(127\.0\.0\.1|localhost)(:\d+)?(/storage/.*)$#i', $url, $matches)) {
+                return $requestHost . $matches[3];
+            }
+            return $url;
         }
 
-        return url(Storage::url($this->avatar));
+        $path = ltrim($url, '/');
+        if (str_starts_with($path, 'storage/')) {
+            $path = substr($path, 8);
+        }
+
+        if ($requestHost) {
+            return $requestHost . '/storage/' . $path;
+        }
+
+        return url(Storage::url($path));
     }
 
     public function statuses(): \Illuminate\Database\Eloquent\Relations\HasMany

@@ -19,7 +19,7 @@ class CreateStatusRequest extends FormRequest
         return [
             'type' => ['sometimes', 'string', 'in:text,image'],
             'content' => ['nullable', 'string', 'max:1000'],
-            'media' => ['nullable', 'file', 'mimes:jpeg,png,jpg,webp,gif', 'max:10240'],
+            'media' => ['nullable', 'file', 'mimes:jpeg,png,jpg,webp,gif', 'max:51200'],
             'background_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'font_style' => ['nullable', 'string', 'in:default,serif,sans,cursive'],
         ];
@@ -30,8 +30,8 @@ class CreateStatusRequest extends FormRequest
         return [
             'type.in' => 'Tipe status hanya boleh text atau image.',
             'media.mimes' => 'Format file gambar harus jpeg, png, jpg, webp, atau gif.',
-            'media.max' => 'Ukuran gambar maksimal adalah 10 MB.',
-            'media.uploaded' => 'File gambar gagal diunggah. Pastikan ukuran file tidak melebihi 10 MB.',
+            'media.max' => 'Ukuran gambar maksimal adalah 50 MB.',
+            'media.uploaded' => 'File gambar gagal diunggah. Pastikan ukuran file tidak melebihi 50 MB.',
             'background_color.regex' => 'Format kode warna latar belakang tidak valid.',
         ];
     }

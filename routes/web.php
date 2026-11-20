@@ -16,3 +16,14 @@ Route::middleware('auth:web')->group(function (): void {
     Route::get('/', [WebChatController::class, 'index'])->name('web.chat');
     Route::get('/chat', [WebChatController::class, 'index']);
 });
+
+Route::get('/storage/{path}', function (string $path) {
+    $fullPath = storage_path('app/public/' . $path);
+    if (!file_exists($fullPath)) {
+        abort(404);
+    }
+    return response()->file($fullPath, [
+        'Access-Control-Allow-Origin' => '*',
+        'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
+    ]);
+})->where('path', '.*');

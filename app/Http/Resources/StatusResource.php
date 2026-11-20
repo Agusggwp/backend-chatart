@@ -17,13 +17,23 @@ class StatusResource extends JsonResource
         $currentUserId = $request->user()?->id;
         $isMine = $currentUserId === $this->user_id;
 
+        $mediaUrl = $this->media_url;
+        try {
+            if ($mediaUrl && $request->hasHeader('Host')) {
+                $host = $request->schemeAndHttpHost();
+                if (preg_match('#^https?://(127\.0\.0\.1|localhost)(:\d+)?(/storage/.*)$#i', $mediaUrl, $matches)) {
+                    $mediaUrl = $host . $matches[3];
+                }
+            }
+        } catch (\Throwable) {}
+
         return [
             'id' => $this->id,
             'user_id' => $this->user_id,
             'user' => new UserResource($this->whenLoaded('user')),
             'type' => $this->type,
             'content' => $this->content ?? '',
-            'media_url' => $this->media_url,
+            'media_url' => $mediaUrl,
             'background_color' => $this->background_color ?? '#128C7E',
             'font_style' => $this->font_style ?? 'default',
             'expires_at' => $this->expires_at?->toISOString(),

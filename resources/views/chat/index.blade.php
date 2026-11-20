@@ -905,21 +905,22 @@
             // Media Preview
             let mediaContent = '';
             if (m.attachment_url) {
+                const mediaUrl = normalizeMediaUrl(m.attachment_url);
                 if (m.type === 'image') {
                     mediaContent = `
-                    <div class="mb-1 rounded overflow-hidden cursor-pointer" onclick="openLightbox('${m.attachment_url}')">
-                        <img src="${m.attachment_url}" class="max-h-64 object-cover rounded hover:opacity-95 transition">
+                    <div class="mb-1 rounded overflow-hidden cursor-pointer" onclick="openLightbox('${mediaUrl}')">
+                        <img src="${mediaUrl}" class="max-h-64 object-cover rounded hover:opacity-95 transition" onerror="this.onerror=null; if(!this.src.includes('/storage/')) this.src='/storage/' + '${m.attachment_url}'.replace(/^https?:\\/\\/[^\\/]+\\/storage\\//, '');">
                     </div>`;
                 } else if (m.type === 'voice') {
                     mediaContent = `
                     <div class="mb-1 p-2 bg-black/5 rounded flex items-center gap-2">
                         <audio controls class="h-8 w-56">
-                            <source src="${m.attachment_url}" type="audio/mpeg">
+                            <source src="${mediaUrl}" type="audio/mpeg">
                         </audio>
                     </div>`;
                 } else {
                     mediaContent = `
-                    <a href="${m.attachment_url}" target="_blank" download class="mb-1 p-2 bg-black/5 rounded flex items-center gap-3 hover:bg-black/10 transition">
+                    <a href="${mediaUrl}" target="_blank" download class="mb-1 p-2 bg-black/5 rounded flex items-center gap-3 hover:bg-black/10 transition">
                         <i class="fa-solid fa-file-lines text-2xl text-wa-green"></i>
                         <div class="truncate text-xs">
                             <div class="font-bold truncate">${escapeHtml(m.file_name || 'Dokumen')}</div>
@@ -1452,6 +1453,14 @@
             .replace(/\n/g, '<br>');
     }
 
+    function normalizeMediaUrl(url) {
+        if (!url) return '';
+        if (/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/storage\/(.+)$/i.test(url)) {
+            return window.location.origin + '/storage/' + url.replace(/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/storage\//i, '');
+        }
+        return url;
+    }
+
     async function loadStarredMessages() {
         try {
             const res = await fetch('/api/messages/starred', {
@@ -1616,9 +1625,10 @@
         const caption = escapeHtml(status.content || '');
         const author = escapeHtml(status.user ? status.user.name : '');
         if (status.type === 'image' && status.media_url) {
+            const mediaUrl = normalizeMediaUrl(status.media_url);
             container.innerHTML = `
                 <div class="w-full h-full flex flex-col items-center justify-center">
-                    <img src="${status.media_url}" class="max-h-96 object-contain rounded mb-3 shadow">
+                    <img src="${mediaUrl}" class="max-h-96 object-contain rounded mb-3 shadow" onerror="this.onerror=null; if(!this.src.includes('/storage/')) this.src='/storage/' + '${status.media_url}'.replace(/^https?:\\/\\/[^\\/]+\\/storage\\//, '');">
                     <p class="text-sm font-semibold">${caption}</p>
                     <div class="text-[11px] text-gray-400 mt-1">${author}</div>
                 </div>`;
