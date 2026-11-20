@@ -123,8 +123,8 @@
         
         <!-- BLANK STATE: No Chat Selected -->
         <div id="blankState" class="flex-1 flex flex-col items-center justify-center p-8 text-center bg-gray-50 border-b-8 border-wa-green select-none">
-            <div class="w-36 h-36 rounded-full bg-emerald-100/70 flex items-center justify-center text-wa-green text-6xl mb-6 shadow-inner">
-                <i class="fa-brands fa-whatsapp"></i>
+            <div class="w-32 h-32 rounded-3xl bg-emerald-950/10 flex items-center justify-center p-5 mb-6 shadow-inner">
+                <img src="/brand_logo.png" alt="ARTDEVATA Logo" class="w-full h-full object-contain">
             </div>
             <h2 class="text-2xl font-semibold text-gray-800 mb-2">ARTDEVATA Web</h2>
             <p class="text-sm text-wa-muted max-w-md leading-relaxed mb-8">

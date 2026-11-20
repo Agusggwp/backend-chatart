@@ -23,6 +23,10 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class ChatService
 {
+    public function __construct(
+        protected PushNotificationService $pushNotificationService
+    ) {}
+
     /**
      * List all conversations for the authenticated user ordered by pinned status and latest activity.
      *
@@ -232,6 +236,9 @@ class ChatService
             ->all();
 
         $this->safeBroadcast(new MessageSent($message, $participantIds));
+
+        $recipientIds = array_values(array_diff($participantIds, [$sender->id]));
+        $this->pushNotificationService->sendChatNotification($message, $recipientIds);
 
         return $message;
     }

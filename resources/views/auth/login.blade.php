@@ -10,9 +10,7 @@
     <div class="w-full md:w-1/2 p-8 border-b md:border-b-0 md:border-r border-wa-border flex flex-col justify-between">
         <div>
             <div class="flex items-center gap-3 mb-6">
-                <div class="w-10 h-10 rounded-full bg-wa-green text-white flex items-center justify-center text-xl shadow">
-                    <i class="fa-brands fa-whatsapp"></i>
-                </div>
+                <img src="/brand_logo.png" alt="ARTDEVATA Logo" class="w-11 h-11 rounded-xl shadow object-contain bg-emerald-950 p-1">
                 <div>
                     <h1 class="text-xl font-bold text-gray-800 tracking-wide">ARTDEVATA WEB</h1>
                     <p class="text-xs text-wa-muted">Sistem Chat Real-Time Berbasis Laravel Reverb</p>
