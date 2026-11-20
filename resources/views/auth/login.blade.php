@@ -24,10 +24,11 @@
                 Pilih pengguna di bawah untuk login instan (1-Klik) atau gunakan formulir di samping.
             </p>
 
-            <!-- Quick Login Cards -->
+            <!-- Quick Login Cards (Development Mode Only) -->
+            @if(!app()->environment('production'))
             <div class="space-y-3 mb-6">
                 <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                    <i class="fa-solid fa-bolt text-yellow-500 mr-1"></i> Quick Login (1-Klik):
+                    <i class="fa-solid fa-bolt text-yellow-500 mr-1"></i> Quick Login (Mode Pengembangan):
                 </div>
                 @foreach($users as $u)
                 <a href="{{ route('web.quick-login', $u->id) }}" 
@@ -45,6 +46,7 @@
                 </a>
                 @endforeach
             </div>
+            @endif
         </div>
 
         <div class="pt-4 border-t border-wa-border flex items-center justify-between text-xs text-wa-muted">

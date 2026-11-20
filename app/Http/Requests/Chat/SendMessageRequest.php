@@ -27,7 +27,7 @@ class SendMessageRequest extends FormRequest
     {
         return [
             'body' => ['nullable', 'string', 'max:5000', 'required_without:attachment'],
-            'attachment' => ['nullable', 'file', 'mimes:jpeg,png,jpg,webp,gif,m4a,mp3,wav,aac,ogg,opus,mp4,bin,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,txt,csv', 'max:25600'],
+            'attachment' => ['nullable', 'file', 'mimes:jpeg,png,jpg,webp,gif,m4a,mp3,wav,aac,ogg,opus,webm,mp4,bin,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,txt,csv', 'max:25600'],
             'file_name' => ['nullable', 'string', 'max:255'],
             'duration' => ['nullable', 'integer', 'min:1'],
             'reply_to_id' => ['nullable', 'integer', 'exists:messages,id'],
@@ -42,7 +42,8 @@ class SendMessageRequest extends FormRequest
         return [
             'body.required_without' => 'Pesan atau lampiran harus diisi.',
             'body.max' => 'Pesan maksimal 5000 karakter.',
-            'attachment.max' => 'Ukuran lampiran maksimal 20 MB.',
+            'attachment.max' => 'Ukuran lampiran maksimal 25 MB.',
+            'attachment.uploaded' => 'File lampiran gagal diunggah. Pastikan ukuran file tidak melebihi 25 MB.',
             'reply_to_id.exists' => 'Pesan yang dibalas tidak ditemukan.',
         ];
     }

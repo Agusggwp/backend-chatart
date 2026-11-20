@@ -27,10 +27,8 @@ class WebChatController extends Controller
         /** @var User $user */
         $user = Auth::user();
 
-        if (! session('sanctum_token')) {
-            $token = $user->createToken('web_session')->plainTextToken;
-            session(['sanctum_token' => $token]);
-        }
+        $token = $user->createToken('web_session')->plainTextToken;
+        session(['sanctum_token' => $token]);
 
         $conversations = $this->chatService->listConversations($user);
         $otherUsers = User::where('id', '!=', $user->id)->orderBy('name')->get();

@@ -374,6 +374,9 @@
                     <input type="file" id="statusImageFileInput" accept="image/jpeg,image/png,image/webp,image/gif"
                            class="w-full text-xs text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-wa-green file:text-white hover:file:bg-emerald-600 cursor-pointer">
                 </div>
+                <div id="statusImagePreviewContainer" class="hidden relative rounded-lg overflow-hidden max-h-48 border border-gray-700 flex justify-center bg-black/50 p-1">
+                    <img id="statusImagePreviewImg" src="" alt="Pratinjau Status" class="max-h-44 object-contain rounded">
+                </div>
                 <div>
                     <label class="block text-xs text-gray-300 mb-1">Keterangan / Caption (Opsional)</label>
                     <input type="text" id="statusImageCaption" placeholder="Tambahkan keterangan..."
@@ -520,6 +523,8 @@
         replyingMessage: null,
         forwardingMessageId: null,
         pusher: null,
+        currentConvChannel: null,
+        currentConvChannelId: null,
         activeCall: null,
         callTimer: null,
         callDurationSeconds: 0,
@@ -542,31 +547,151 @@
     // Setup Reverb WebSocket Connection via Pusher JS
     function initReverb() {
         try {
-            App.pusher = new Pusher('artdevata_key', {
-                wsHost: '127.0.0.1',
-                wsPort: 8080,
-                wssPort: 8080,
+            const reverbKey = "{{ config('broadcasting.connections.reverb.key') ?? env('REVERB_APP_KEY', 'lsln0nymfrhmfhidz2jl') }}";
+            const reverbHost = "{{ config('broadcasting.connections.reverb.options.host') ?? env('REVERB_HOST', '127.0.0.1') }}";
+            const reverbPort = {{ config('broadcasting.connections.reverb.options.port') ?? env('REVERB_PORT', 8080) }};
+
+            App.pusher = new Pusher(reverbKey, {
+                wsHost: reverbHost,
+                wsPort: reverbPort,
+                wssPort: reverbPort,
                 forceTLS: false,
-                enabledTransports: ['ws', 'flash'],
+                enabledTransports: ['ws'],
+                channelAuthorization: {
+                    endpoint: '/api/broadcasting/auth',
+                    headers: {
+                        'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN),
+                        'Accept': 'application/json'
+                    }
+                },
                 authEndpoint: '/api/broadcasting/auth',
                 auth: {
                     headers: {
-                        'Authorization': 'Bearer ' + App.token,
+                        'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN),
                         'Accept': 'application/json'
                     }
                 }
             });
 
-            // Listen on user's private channel
+            // 1. User private channel (incoming calls, cross-chat notifications, etc.)
             const userChannel = App.pusher.subscribe('private-user.' + App.currentUser.id);
+
             userChannel.bind('call.incoming', (data) => {
                 showIncomingCallModal(data.call);
             });
+
             userChannel.bind('message.sent', (data) => {
                 handleIncomingMessage(data.message);
             });
+
+            userChannel.bind('message.deleted', (data) => {
+                handleMessageDeleted(data);
+            });
+
+            userChannel.bind('message.reaction', (data) => {
+                handleMessageReaction(data);
+            });
+
+            // 2. Public statuses channel (real-time new status updates)
+            const statusChannel = App.pusher.subscribe('statuses');
+            statusChannel.bind('status.created', (data) => {
+                handleIncomingStatus(data.status);
+            });
+
+            console.log('[Reverb] Real-time WebSocket connected as', App.currentUser.name);
         } catch (e) {
-            console.warn('Reverb WebSocket fallback to polling:', e);
+            console.warn('[Reverb] WebSocket connection failed, polling fallback active:', e);
+        }
+    }
+
+    // Real-time Event Handlers
+    function handleIncomingMessage(msg) {
+        if (!msg) return;
+
+        // If message belongs to active conversation
+        if (Number(msg.conversation_id) === Number(App.activeConversationId)) {
+            const exists = App.messages.some(m => Number(m.id) === Number(msg.id));
+            if (!exists) {
+                App.messages.push(msg);
+                renderMessages();
+
+                // If sent by someone else, mark as read
+                if (Number(msg.sender_id) !== Number(App.currentUser.id)) {
+                    fetch(`/api/conversations/${App.activeConversationId}/read`, {
+                        method: 'POST',
+                        headers: { 'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN), 'Accept': 'application/json' }
+                    });
+                }
+            }
+        }
+
+        // Always update sidebar conversation list
+        loadConversations(true);
+    }
+
+    let typingTimer = null;
+    function handleUserTyping(data) {
+        if (!data || Number(data.user_id) === Number(App.currentUser.id)) return;
+        if (Number(data.conversation_id) !== Number(App.activeConversationId)) return;
+
+        const subtitle = document.getElementById('chatHeaderSubtitle');
+        if (!subtitle) return;
+
+        if (data.is_typing) {
+            subtitle.innerText = 'sedang mengetik...';
+            subtitle.className = 'text-xs text-wa-green font-semibold animate-pulse';
+
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(() => {
+                const conv = App.activeConversation;
+                subtitle.innerText = conv && conv.other_user && conv.other_user.is_online ? 'online' : '';
+                subtitle.className = 'text-xs text-wa-muted';
+            }, 3000);
+        }
+    }
+
+    function handleMessagesRead(data) {
+        if (!data || Number(data.conversation_id) !== Number(App.activeConversationId)) return;
+        App.messages.forEach(m => {
+            if (Number(m.sender_id) === Number(App.currentUser.id)) {
+                m.is_read = true;
+                m.read_at = data.read_at;
+            }
+        });
+        renderMessages();
+    }
+
+    function handleMessageReaction(data) {
+        if (!data) return;
+        const msg = App.messages.find(m => Number(m.id) === Number(data.message_id));
+        if (msg) {
+            msg.reactions = data.reactions;
+            renderMessages();
+        }
+    }
+
+    function handleMessageDeleted(data) {
+        if (!data) return;
+        const msg = App.messages.find(m => Number(m.id) === Number(data.message_id));
+        if (msg) {
+            if (data.is_deleted_for_everyone) {
+                msg.is_deleted_for_everyone = true;
+                msg.body = 'Pesan ini telah dihapus';
+                msg.attachment_url = null;
+            } else if (Number(data.deleted_by_user_id) === Number(App.currentUser.id)) {
+                App.messages = App.messages.filter(m => Number(m.id) !== Number(data.message_id));
+            }
+            renderMessages();
+        }
+    }
+
+    function handleIncomingStatus(status) {
+        if (!status) return;
+        const btn = document.querySelector('button[title="Status / Cerita"]');
+        if (btn && !btn.querySelector('.status-dot')) {
+            const dot = document.createElement('span');
+            dot.className = 'status-dot absolute -top-1 -right-1 w-2.5 h-2.5 bg-wa-green rounded-full border-2 border-white animate-ping';
+            btn.appendChild(dot);
         }
     }
 
@@ -574,12 +699,17 @@
     async function loadConversations(isSilent = false) {
         try {
             const res = await fetch('/api/conversations', {
-                headers: { 'Authorization': 'Bearer ' + App.token, 'Accept': 'application/json' }
+                headers: { 'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN), 'Accept': 'application/json' }
             });
             const json = await res.json();
             if (json.data && json.data.conversations) {
                 App.conversations = json.data.conversations;
                 renderConversations();
+
+                // Auto-select first conversation if none selected yet
+                if (!App.activeConversationId && App.conversations.length > 0) {
+                    selectConversation(App.conversations[0].id);
+                }
             }
         } catch (e) {
             console.error('Failed to load conversations:', e);
@@ -613,9 +743,11 @@
         let html = '';
         filtered.forEach(c => {
             const isActive = c.id === App.activeConversationId;
-            const displayName = c.display_name || (c.other_user ? c.other_user.name : (c.name || 'Grup'));
-            const initial = displayName.substring(0, 2).toUpperCase();
-            const lastMsg = c.last_message ? (c.last_message.body || (c.last_message.type === 'image' ? '📷 Foto' : '📎 Berkas')) : 'Belum ada pesan';
+            const rawName = c.display_name || (c.other_user ? c.other_user.name : (c.name || 'Grup'));
+            const displayName = escapeHtml(rawName);
+            const initial = escapeHtml(rawName.substring(0, 2).toUpperCase());
+            const rawMsg = c.last_message ? (c.last_message.body || (c.last_message.type === 'image' ? '📷 Foto' : '📎 Berkas')) : 'Belum ada pesan';
+            const lastMsg = escapeHtml(rawMsg);
             const time = c.last_message ? formatTime(c.last_message.created_at) : '';
             const unread = c.unread_count > 0 ? `<span class="bg-wa-green text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0">${c.unread_count}</span>` : '';
             const pinIcon = c.is_pinned ? `<i class="fa-solid fa-thumbtack text-wa-muted text-xs mr-1"></i>` : '';
@@ -650,8 +782,8 @@
 
     // Select and Open Conversation
     async function selectConversation(id) {
-        App.activeConversationId = id;
-        App.activeConversation = App.conversations.find(c => c.id === id);
+        App.activeConversationId = Number(id);
+        App.activeConversation = App.conversations.find(c => Number(c.id) === Number(id));
         
         document.getElementById('blankState').classList.add('hidden');
         document.getElementById('activeChatView').classList.remove('hidden');
@@ -678,10 +810,41 @@
         renderConversations();
         await syncActiveChatMessages();
         
+        // Switch conversation WebSocket channel
+        if (App.currentConvChannel && App.currentConvChannelId !== Number(id)) {
+            App.pusher.unsubscribe('private-conversation.' + App.currentConvChannelId);
+            App.currentConvChannel = null;
+        }
+
+        if (App.pusher && App.currentConvChannelId !== Number(id)) {
+            App.currentConvChannelId = Number(id);
+            App.currentConvChannel = App.pusher.subscribe('private-conversation.' + id);
+
+            App.currentConvChannel.bind('message.sent', (data) => {
+                handleIncomingMessage(data.message);
+            });
+
+            App.currentConvChannel.bind('user.typing', (data) => {
+                handleUserTyping(data);
+            });
+
+            App.currentConvChannel.bind('messages.read', (data) => {
+                handleMessagesRead(data);
+            });
+
+            App.currentConvChannel.bind('message.reaction', (data) => {
+                handleMessageReaction(data);
+            });
+
+            App.currentConvChannel.bind('message.deleted', (data) => {
+                handleMessageDeleted(data);
+            });
+        }
+
         // Mark as read
         fetch(`/api/conversations/${id}/read`, {
             method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + App.token, 'Accept': 'application/json' }
+            headers: { 'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN), 'Accept': 'application/json' }
         });
     }
 
@@ -690,11 +853,12 @@
         if (!App.activeConversationId) return;
         try {
             const res = await fetch(`/api/conversations/${App.activeConversationId}/messages`, {
-                headers: { 'Authorization': 'Bearer ' + App.token, 'Accept': 'application/json' }
+                headers: { 'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN), 'Accept': 'application/json' }
             });
             const json = await res.json();
             if (json.data && json.data.messages) {
-                App.messages = json.data.messages;
+                // Reverse so oldest at top, newest at bottom
+                App.messages = [...json.data.messages].reverse();
                 renderMessages();
             }
         } catch (e) {
@@ -733,8 +897,8 @@
             if (m.reply_to) {
                 replySnippet = `
                 <div class="bg-black/5 border-l-4 border-wa-green p-1.5 rounded text-xs mb-1">
-                    <div class="font-bold text-wa-green">${m.reply_to.sender_name}</div>
-                    <div class="text-gray-600 truncate">${m.reply_to.body}</div>
+                    <div class="font-bold text-wa-green">${escapeHtml(m.reply_to.sender_name || '')}</div>
+                    <div class="text-gray-600 truncate">${escapeHtml(m.reply_to.body || '')}</div>
                 </div>`;
             }
 
@@ -758,7 +922,7 @@
                     <a href="${m.attachment_url}" target="_blank" download class="mb-1 p-2 bg-black/5 rounded flex items-center gap-3 hover:bg-black/10 transition">
                         <i class="fa-solid fa-file-lines text-2xl text-wa-green"></i>
                         <div class="truncate text-xs">
-                            <div class="font-bold truncate">${m.file_name || 'Dokumen'}</div>
+                            <div class="font-bold truncate">${escapeHtml(m.file_name || 'Dokumen')}</div>
                             <div class="text-[10px] text-gray-500">Klik untuk mengunduh</div>
                         </div>
                     </a>`;
@@ -823,8 +987,14 @@
     async function sendMessage() {
         const input = document.getElementById('messageInput');
         const text = input.value.trim();
-        if (!text || !App.activeConversationId) return;
+        if (!text) return;
 
+        if (!App.activeConversationId) {
+            alert('Silakan pilih salah satu obrolan di sebelah kiri terlebih dahulu.');
+            return;
+        }
+
+        const originalText = text;
         input.value = '';
         input.style.height = 'auto';
 
@@ -835,23 +1005,30 @@
         cancelReply();
 
         try {
+            const token = App.token || window.SANCTUM_TOKEN;
             const res = await fetch(`/api/conversations/${App.activeConversationId}/messages`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': 'Bearer ' + App.token,
+                    'Authorization': 'Bearer ' + token,
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': window.CSRF_TOKEN || ''
                 },
                 body: JSON.stringify(payload)
             });
             const json = await res.json();
-            if (json.data && json.data.message) {
+            if (res.ok && json.data && json.data.message) {
                 App.messages.push(json.data.message);
                 renderMessages();
                 loadConversations(true);
+            } else {
+                input.value = originalText;
+                alert('Gagal mengirim pesan: ' + (json.message || 'Terjadi kesalahan'));
             }
         } catch (e) {
+            input.value = originalText;
             console.error('Failed to send message:', e);
+            alert('Gagal mengirim pesan: ' + e);
         }
     }
 
@@ -866,7 +1043,12 @@
     // Handle Image Upload
     async function handleImagePicked(input) {
         toggleDropdown('attachDropdown');
-        if (!input.files || input.files.length === 0 || !App.activeConversationId) return;
+        if (!input.files || input.files.length === 0) return;
+        if (!App.activeConversationId) {
+            alert('Silakan pilih obrolan di sebelah kiri terlebih dahulu.');
+            input.value = '';
+            return;
+        }
 
         const file = input.files[0];
         const formData = new FormData();
@@ -874,15 +1056,23 @@
         formData.append('file_name', file.name);
 
         try {
+            const token = App.token || window.SANCTUM_TOKEN;
             const res = await fetch(`/api/conversations/${App.activeConversationId}/messages`, {
                 method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + App.token, 'Accept': 'application/json' },
+                headers: { 
+                    'Authorization': 'Bearer ' + token, 
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': window.CSRF_TOKEN || ''
+                },
                 body: formData
             });
             const json = await res.json();
-            if (json.data && json.data.message) {
+            if (res.ok && json.data && json.data.message) {
                 App.messages.push(json.data.message);
                 renderMessages();
+                loadConversations(true);
+            } else {
+                alert('Gagal mengirim gambar: ' + (json.message || 'Terjadi kesalahan'));
             }
         } catch (e) {
             alert('Gagal mengirim gambar: ' + e);
@@ -893,7 +1083,12 @@
     // Handle Document Upload
     async function handleDocPicked(input) {
         toggleDropdown('attachDropdown');
-        if (!input.files || input.files.length === 0 || !App.activeConversationId) return;
+        if (!input.files || input.files.length === 0) return;
+        if (!App.activeConversationId) {
+            alert('Silakan pilih obrolan di sebelah kiri terlebih dahulu.');
+            input.value = '';
+            return;
+        }
 
         const file = input.files[0];
         const formData = new FormData();
@@ -901,15 +1096,23 @@
         formData.append('file_name', file.name);
 
         try {
+            const token = App.token || window.SANCTUM_TOKEN;
             const res = await fetch(`/api/conversations/${App.activeConversationId}/messages`, {
                 method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + App.token, 'Accept': 'application/json' },
+                headers: { 
+                    'Authorization': 'Bearer ' + token, 
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': window.CSRF_TOKEN || ''
+                },
                 body: formData
             });
             const json = await res.json();
-            if (json.data && json.data.message) {
+            if (res.ok && json.data && json.data.message) {
                 App.messages.push(json.data.message);
                 renderMessages();
+                loadConversations(true);
+            } else {
+                alert('Gagal mengirim dokumen: ' + (json.message || 'Terjadi kesalahan'));
             }
         } catch (e) {
             alert('Gagal mengirim dokumen: ' + e);
@@ -1239,13 +1442,20 @@
     }
 
     function escapeHtml(text) {
-        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\n/g, '<br>');
+        if (!text) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;')
+            .replace(/\n/g, '<br>');
     }
 
     async function loadStarredMessages() {
         try {
             const res = await fetch('/api/messages/starred', {
-                headers: { 'Authorization': 'Bearer ' + App.token, 'Accept': 'application/json' }
+                headers: { 'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN), 'Accept': 'application/json' }
             });
             const json = await res.json();
             const container = document.getElementById('starredMessagesList');
@@ -1254,7 +1464,7 @@
                 json.data.messages.forEach(m => {
                     html += `
                     <div class="p-2.5 hover:bg-gray-50">
-                        <div class="font-bold text-wa-green mb-0.5">${m.sender ? m.sender.name : 'Pengguna'}</div>
+                        <div class="font-bold text-wa-green mb-0.5">${escapeHtml(m.sender ? m.sender.name : 'Pengguna')}</div>
                         <div class="text-gray-800">${escapeHtml(m.body || '')}</div>
                         <div class="text-[10px] text-gray-400 mt-1">${formatTime(m.created_at)}</div>
                     </div>`;
@@ -1287,6 +1497,22 @@
     function openCreateStatusModal() {
         closeModal('statusModal');
         openModal('createStatusModal');
+
+        const fileInput = document.getElementById('statusImageFileInput');
+        if (fileInput && !fileInput.dataset.listenerAttached) {
+            fileInput.dataset.listenerAttached = 'true';
+            fileInput.addEventListener('change', function() {
+                const file = this.files[0];
+                const previewCont = document.getElementById('statusImagePreviewContainer');
+                const previewImg = document.getElementById('statusImagePreviewImg');
+                if (file) {
+                    previewImg.src = URL.createObjectURL(file);
+                    previewCont.classList.remove('hidden');
+                } else {
+                    previewCont.classList.add('hidden');
+                }
+            });
+        }
     }
 
     function setStatusTab(type) {
@@ -1347,11 +1573,13 @@
                 }
             }
 
+            const token = App.token || window.SANCTUM_TOKEN;
             const res = await fetch('/api/statuses', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${window.SANCTUM_TOKEN}`,
-                    'Accept': 'application/json'
+                    'Authorization': 'Bearer ' + token,
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': window.CSRF_TOKEN || ''
                 },
                 body: formData
             });
@@ -1362,10 +1590,17 @@
                 document.getElementById('statusTextInput').value = '';
                 document.getElementById('statusImageFileInput').value = '';
                 document.getElementById('statusImageCaption').value = '';
+                const previewCont = document.getElementById('statusImagePreviewContainer');
+                if (previewCont) previewCont.classList.add('hidden');
                 alert('Status baru berhasil dibagikan!');
                 window.location.reload();
             } else {
-                alert(data.message || 'Gagal membagikan status.');
+                let errorMsg = data.message || 'Gagal membagikan status.';
+                if (data.errors) {
+                    const first = Object.values(data.errors).flat()[0];
+                    if (first) errorMsg = first;
+                }
+                alert(errorMsg);
             }
         } catch (e) {
             console.error(e);
@@ -1378,19 +1613,21 @@
 
     function viewSingleStatus(status) {
         const container = document.getElementById('statusContentArea');
+        const caption = escapeHtml(status.content || '');
+        const author = escapeHtml(status.user ? status.user.name : '');
         if (status.type === 'image' && status.media_url) {
             container.innerHTML = `
                 <div class="w-full h-full flex flex-col items-center justify-center">
                     <img src="${status.media_url}" class="max-h-96 object-contain rounded mb-3 shadow">
-                    <p class="text-sm font-semibold">${status.content || ''}</p>
-                    <div class="text-[11px] text-gray-400 mt-1">${status.user ? status.user.name : ''}</div>
+                    <p class="text-sm font-semibold">${caption}</p>
+                    <div class="text-[11px] text-gray-400 mt-1">${author}</div>
                 </div>`;
         } else {
             const bg = status.background_color || '#00a884';
             container.innerHTML = `
                 <div class="w-full h-full flex flex-col items-center justify-center p-8 rounded-lg shadow-inner" style="background-color: ${bg}">
-                    <p class="text-2xl font-bold max-w-sm">${status.content || ''}</p>
-                    <div class="text-xs text-white/80 mt-4">${status.user ? status.user.name : ''}</div>
+                    <p class="text-2xl font-bold max-w-sm">${caption}</p>
+                    <div class="text-xs text-white/80 mt-4">${author}</div>
                 </div>`;
         }
     }

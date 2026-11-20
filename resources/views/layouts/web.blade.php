@@ -42,6 +42,13 @@
     <!-- Pusher JS for Laravel Reverb WebSocket -->
     <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 
+    <script>
+        window.CSRF_TOKEN = "{{ csrf_token() }}";
+        @if(session('sanctum_token'))
+            window.SANCTUM_TOKEN = "{{ session('sanctum_token') }}";
+        @endif
+    </script>
+
     <style>
         body {
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;

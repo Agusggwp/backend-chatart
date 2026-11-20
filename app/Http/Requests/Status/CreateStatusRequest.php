@@ -31,6 +31,7 @@ class CreateStatusRequest extends FormRequest
             'type.in' => 'Tipe status hanya boleh text atau image.',
             'media.mimes' => 'Format file gambar harus jpeg, png, jpg, webp, atau gif.',
             'media.max' => 'Ukuran gambar maksimal adalah 10 MB.',
+            'media.uploaded' => 'File gambar gagal diunggah. Pastikan ukuran file tidak melebihi 10 MB.',
             'background_color.regex' => 'Format kode warna latar belakang tidak valid.',
         ];
     }

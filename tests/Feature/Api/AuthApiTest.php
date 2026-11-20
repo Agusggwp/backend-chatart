@@ -162,4 +162,26 @@ class AuthApiTest extends TestCase
             ->getJson('/api/me')
             ->assertUnauthorized();
     }
+
+    public function test_registration_rejects_invalid_payload(): void
+    {
+        $response = $this->postJson('/api/register', [
+            'name' => '',
+            'username' => 'a',
+            'email' => 'not-an-email',
+            'password' => 'short',
+            'password_confirmation' => 'mismatch',
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['name', 'username', 'email', 'password']);
+    }
+
+    public function test_invalid_token_is_rejected(): void
+    {
+        $this->withToken('invalid-sanctum-token-123456789')
+            ->getJson('/api/me')
+            ->assertUnauthorized()
+            ->assertJsonPath('success', false);
+    }
 }

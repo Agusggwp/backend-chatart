@@ -89,4 +89,24 @@ class UserDiscoveryApiTest extends TestCase
             ->assertNotFound()
             ->assertJsonPath('success', false);
     }
+
+    public function test_user_list_supports_pagination(): void
+    {
+        $me = User::factory()->create();
+        User::factory()->count(15)->create();
+
+        Sanctum::actingAs($me);
+
+        $response = $this->getJson('/api/users?per_page=5');
+        $response->assertOk()
+            ->assertJsonCount(5, 'data.users')
+            ->assertJsonPath('meta.per_page', 5)
+            ->assertJsonPath('meta.total', 15);
+    }
+
+    public function test_user_discovery_rejects_unauthenticated_access(): void
+    {
+        $this->getJson('/api/users')->assertUnauthorized();
+        $this->getJson('/api/users/1')->assertUnauthorized();
+    }
 }

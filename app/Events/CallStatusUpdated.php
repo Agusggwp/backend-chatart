@@ -47,8 +47,11 @@ class CallStatusUpdated implements ShouldBroadcastNow
                 'id' => $this->call->id,
                 'caller_id' => $this->call->caller_id,
                 'receiver_id' => $this->call->receiver_id,
+                'conversation_id' => $this->call->conversation_id,
+                'type' => $this->call->type,
                 'status' => $this->call->status,
                 'duration' => $this->call->duration,
+                'created_at' => $this->call->created_at?->toIso8601String(),
                 'started_at' => $this->call->started_at?->toIso8601String(),
                 'ended_at' => $this->call->ended_at?->toIso8601String(),
                 'caller' => $caller ? [

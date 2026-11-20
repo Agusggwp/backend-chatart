@@ -49,6 +49,10 @@ class WebAuthController extends Controller
 
     public function quickLogin(Request $request, User $user): RedirectResponse
     {
+        if (app()->environment('production')) {
+            abort(403, 'Fitur Quick Login dinonaktifkan pada lingkungan produksi untuk alasan keamanan.');
+        }
+
         Auth::login($user, true);
         $request->session()->regenerate();
         $user->presence()->updateOrCreate([], ['is_online' => true, 'last_seen_at' => now()]);
@@ -63,7 +67,15 @@ class WebAuthController extends Controller
     {
         if (Auth::check()) {
             $user = Auth::user();
-            $user->presence()->updateOrCreate([], ['is_online' => false, 'last_seen_at' => now()]);
+            $token = session('sanctum_token');
+            if ($token && str_contains($token, '|')) {
+                [$tokenId] = explode('|', $token, 2);
+                $user->tokens()->where('id', $tokenId)->delete();
+            }
+
+            if (! $user->tokens()->exists()) {
+                $user->presence()->updateOrCreate([], ['is_online' => false, 'last_seen_at' => now()]);
+            }
         }
 
         Auth::logout();
