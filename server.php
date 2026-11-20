@@ -2,8 +2,9 @@
 
 /**
  * Custom router script for PHP built-in web server (artisan serve).
- * Provides CORS headers for all static files (including /storage/) and API requests,
- * allowing Flutter Web, React Web, and Blade Web to access media assets seamlessly.
+ * Provides CORS headers for static files (/storage/) so that
+ * Flutter Web, React Web, and Blade Web can load media without CORS issues.
+ * All /api/* and dynamic routes are delegated to Laravel's index.php and HandleCors.
  */
 
 $publicPath = getcwd();
@@ -12,19 +13,17 @@ $uri = urldecode(
     parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?? ''
 );
 
-// Always set permissive CORS headers
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
-header('Access-Control-Allow-Headers: Origin, Content-Type, Accept, Authorization, X-Requested-With, X-CSRF-TOKEN, X-Socket-ID');
-
-// Handle preflight OPTIONS immediately
-if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(204);
-    exit;
-}
-
 // Intercept /storage/ requests to deliver CORS headers with static file contents
 if (str_starts_with($uri, '/storage/')) {
+    header('Access-Control-Allow-Origin: *');
+    header('Access-Control-Allow-Methods: GET, HEAD, OPTIONS');
+    header('Access-Control-Allow-Headers: *');
+
+    if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+        http_response_code(204);
+        exit;
+    }
+
     $filePath = $publicPath . $uri;
     if (file_exists($filePath) && !is_dir($filePath)) {
         $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
