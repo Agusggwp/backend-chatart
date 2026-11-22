@@ -88,4 +88,56 @@ class ConversationController extends Controller
             message: $result['is_archived'] ? 'Percakapan berhasil diarsipkan.' : 'Percakapan dikembalikan dari arsip.'
         );
     }
+
+    public function mute(\App\Http\Requests\Chat\MuteConversationRequest $request, Conversation $conversation): JsonResponse
+    {
+        $result = $this->chatService->muteConversation(
+            $request->user(),
+            $conversation,
+            $request->validated('duration_minutes') ? (int) $request->validated('duration_minutes') : null
+        );
+
+        return ApiResponse::success(
+            data: $result,
+            message: 'Notifikasi percakapan berhasil dibisukan.'
+        );
+    }
+
+    public function unmute(Request $request, Conversation $conversation): JsonResponse
+    {
+        $result = $this->chatService->unmuteConversation($request->user(), $conversation);
+
+        return ApiResponse::success(
+            data: $result,
+            message: 'Notifikasi percakapan diaktifkan kembali.'
+        );
+    }
+
+    public function clear(Request $request, Conversation $conversation): JsonResponse
+    {
+        $this->chatService->clearConversation($request->user(), $conversation);
+
+        return ApiResponse::success(
+            data: null,
+            message: 'Riwayat percakapan berhasil dibersihkan.'
+        );
+    }
+
+    public function export(Request $request, Conversation $conversation): JsonResponse|\Symfony\Component\HttpFoundation\Response
+    {
+        $format = $request->query('format', 'json');
+        $result = $this->chatService->exportConversation($request->user(), $conversation, $format);
+
+        if ($format === 'txt') {
+            return response($result, 200, [
+                'Content-Type' => 'text/plain',
+                'Content-Disposition' => 'attachment; filename="chat-export-' . $conversation->id . '.txt"',
+            ]);
+        }
+
+        return ApiResponse::success(
+            data: $result,
+            message: 'Riwayat obrolan berhasil diekspor.'
+        );
+    }
 }

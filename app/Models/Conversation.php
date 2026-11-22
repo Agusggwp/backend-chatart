@@ -25,6 +25,9 @@ class Conversation extends Model
         'type',
         'name',
         'description',
+        'invite_token',
+        'invite_token_created_at',
+        'settings',
         'avatar',
         'created_by',
         'last_message_at',
@@ -37,6 +40,8 @@ class Conversation extends Model
     {
         return [
             'last_message_at' => 'datetime',
+            'invite_token_created_at' => 'datetime',
+            'settings' => 'array',
         ];
     }
 
@@ -58,7 +63,7 @@ class Conversation extends Model
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'conversation_participants')
-            ->withPivot(['role', 'is_pinned', 'pinned_at', 'is_archived', 'archived_at', 'last_read_at'])
+            ->withPivot(['role', 'is_pinned', 'pinned_at', 'is_archived', 'archived_at', 'is_muted', 'muted_until', 'cleared_at', 'last_read_at'])
             ->withTimestamps();
     }
 
@@ -75,6 +80,11 @@ class Conversation extends Model
     public function hasParticipant(int $userId): bool
     {
         return $this->participants()->where('user_id', $userId)->exists();
+    }
+
+    public function isParticipant(int $userId): bool
+    {
+        return $this->hasParticipant($userId);
     }
 
     public function isAdmin(int $userId): bool

@@ -122,14 +122,20 @@ class ChatService
     {
         $this->ensureParticipant($user, $conversation);
 
-        return $conversation->messages()
+        $participant = $conversation->participants()->where('user_id', $user->id)->first();
+
+        $query = $conversation->messages()
             ->with(['sender', 'replyTo.sender'])
-            ->where(function ($query) use ($user) {
-                $query->whereNull('deleted_for_user_ids')
+            ->where(function ($q) use ($user) {
+                $q->whereNull('deleted_for_user_ids')
                     ->orWhereJsonDoesntContain('deleted_for_user_ids', $user->id);
-            })
-            ->orderByDesc('id')
-            ->paginate($perPage);
+            });
+
+        if ($participant && $participant->cleared_at) {
+            $query->where('created_at', '>', $participant->cleared_at);
+        }
+
+        return $query->orderByDesc('id')->paginate($perPage);
     }
 
     /**
@@ -167,7 +173,7 @@ class ChatService
             $ext = strtolower((string) $attachment->getClientOriginalExtension());
             $fileName = $attachment->getClientOriginalName();
 
-            $isAudio = str_starts_with($mime, 'audio/') || in_array($ext, ['m4a', 'mp3', 'wav', 'aac', 'ogg', 'opus', 'bin'], true);
+            $isAudio = str_starts_with($mime, 'audio/') || in_array($ext, ['m4a', 'mp3', 'wav', 'aac', 'ogg', 'opus', 'webm', 'bin'], true);
             $isImage = str_starts_with($mime, 'image/') || in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true);
 
             if ($isAudio || $duration !== null) {
@@ -715,6 +721,125 @@ class ChatService
             ->delete();
 
         return true;
+    }
+
+    public function editMessage(User $user, Conversation $conversation, Message $message, string $newBody): Message
+    {
+        $this->ensureParticipant($user, $conversation);
+
+        if ($message->sender_id !== $user->id) {
+            throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('Hanya pengirim yang dapat mengedit pesan ini.');
+        }
+
+        if ($message->is_deleted_for_everyone) {
+            throw new \Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException('Pesan yang telah dihapus tidak dapat diedit.');
+        }
+
+        if ($message->type !== 'text') {
+            throw new \Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException('Hanya pesan teks yang dapat diedit.');
+        }
+
+        if ($message->original_body === null) {
+            $message->original_body = $message->body;
+        }
+
+        $message->body = $newBody;
+        $message->is_edited = true;
+        $message->edited_at = now();
+        $message->save();
+
+        $this->safeBroadcast(new \App\Events\MessageEdited($message));
+
+        return $message;
+    }
+
+    public function muteConversation(User $user, Conversation $conversation, ?int $durationMinutes = null): array
+    {
+        $this->ensureParticipant($user, $conversation);
+
+        $mutedUntil = $durationMinutes ? now()->addMinutes($durationMinutes) : null;
+
+        $conversation->participants()
+            ->where('user_id', $user->id)
+            ->update([
+                'is_muted' => true,
+                'muted_until' => $mutedUntil,
+            ]);
+
+        return [
+            'is_muted' => true,
+            'muted_until' => $mutedUntil?->toIso8601String(),
+        ];
+    }
+
+    public function unmuteConversation(User $user, Conversation $conversation): array
+    {
+        $this->ensureParticipant($user, $conversation);
+
+        $conversation->participants()
+            ->where('user_id', $user->id)
+            ->update([
+                'is_muted' => false,
+                'muted_until' => null,
+            ]);
+
+        return [
+            'is_muted' => false,
+            'muted_until' => null,
+        ];
+    }
+
+    public function clearConversation(User $user, Conversation $conversation): void
+    {
+        $this->ensureParticipant($user, $conversation);
+
+        $conversation->participants()
+            ->where('user_id', $user->id)
+            ->update([
+                'cleared_at' => now(),
+            ]);
+    }
+
+    public function exportConversation(User $user, Conversation $conversation, string $format = 'json'): array|string
+    {
+        $this->ensureParticipant($user, $conversation);
+
+        $messages = $conversation->messages()
+            ->with(['sender:id,name,username'])
+            ->where('is_deleted_for_everyone', false)
+            ->orderBy('id', 'asc')
+            ->get();
+
+        if ($format === 'txt') {
+            $txt = "=== RIWAYAT OBROLAN ARTDEVATA CHAT ===\n";
+            $txt .= "Percakapan: " . ($conversation->isGroup() ? ($conversation->name ?? 'Grup') : 'Pribadi') . "\n";
+            $txt .= "Tanggal Ekspor: " . now()->toDateTimeString() . "\n\n";
+
+            foreach ($messages as $m) {
+                $time = $m->created_at?->format('d/m/Y H:i') ?? '';
+                $sender = $m->sender?->name ?? 'Unknown';
+                $body = $m->type === 'text' ? $m->body : '[' . strtoupper($m->type) . ': ' . ($m->file_name ?? $m->attachment_url) . ']';
+                if ($m->is_edited) {
+                    $body .= ' (diedit)';
+                }
+                $txt .= "[$time] $sender: $body\n";
+            }
+            return $txt;
+        }
+
+        return [
+            'conversation_id' => $conversation->id,
+            'exported_at' => now()->toIso8601String(),
+            'total_messages' => $messages->count(),
+            'messages' => $messages->map(fn ($m) => [
+                'id' => $m->id,
+                'sender' => $m->sender?->name,
+                'type' => $m->type,
+                'body' => $m->body,
+                'is_edited' => (bool) $m->is_edited,
+                'created_at' => $m->created_at?->toIso8601String(),
+            ])->all(),
+        ];
     }
 
     public function listBlockedUsers(User $currentUser): Collection

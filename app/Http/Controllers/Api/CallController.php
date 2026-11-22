@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Call\InitiateCallRequest;
+use App\Http\Requests\Call\SendCallSignalRequest;
 use App\Http\Resources\CallResource;
 use App\Models\Call;
 use App\Services\CallService;
@@ -87,6 +88,21 @@ class CallController extends Controller
                 'call' => new CallResource($updated),
             ],
             message: 'Panggilan telah berakhir.'
+        );
+    }
+
+    public function signal(SendCallSignalRequest $request, Call $call): JsonResponse
+    {
+        $this->callService->sendSignal(
+            user: $request->user(),
+            call: $call,
+            signalType: (string) $request->validated('signal_type'),
+            signalData: $request->input('signal_data'),
+        );
+
+        return ApiResponse::success(
+            data: null,
+            message: 'Sinyal WebRTC berhasil dikirim.'
         );
     }
 }

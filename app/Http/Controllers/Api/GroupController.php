@@ -113,4 +113,49 @@ class GroupController extends Controller
             message: 'Anda telah keluar dari grup.'
         );
     }
+
+    public function generateInviteToken(Request $request, Conversation $conversation): JsonResponse
+    {
+        $token = $this->groupService->generateInviteToken($request->user(), $conversation);
+
+        return ApiResponse::success(
+            data: [
+                'invite_token' => $token,
+                'invite_url' => url('/groups/join-invite/' . $token),
+            ],
+            message: 'Tautan undangan grup berhasil dibuat.'
+        );
+    }
+
+    public function joinByInviteToken(Request $request, string $token): JsonResponse
+    {
+        $group = $this->groupService->joinByInviteToken($token, $request->user());
+
+        return ApiResponse::success(
+            data: [
+                'conversation' => new ConversationResource($group),
+            ],
+            message: 'Berhasil bergabung dengan grup.'
+        );
+    }
+
+    public function updatePermissions(Request $request, Conversation $conversation): JsonResponse
+    {
+        $request->validate([
+            'permissions' => ['required', 'array'],
+        ]);
+
+        $group = $this->groupService->updatePermissions(
+            $request->user(),
+            $conversation,
+            $request->input('permissions')
+        );
+
+        return ApiResponse::success(
+            data: [
+                'conversation' => new ConversationResource($group),
+            ],
+            message: 'Izin grup berhasil diperbarui.'
+        );
+    }
 }

@@ -36,6 +36,32 @@ class DeviceController extends Controller
         );
     }
 
+    public function index(Request $request): JsonResponse
+    {
+        $devices = \App\Models\UserDevice::where('user_id', $request->user()->id)
+            ->orderByDesc('last_active_at')
+            ->get();
+
+        return ApiResponse::success(
+            data: [
+                'devices' => $devices,
+            ],
+            message: 'Daftar perangkat berhasil diambil.'
+        );
+    }
+
+    public function destroy(Request $request, int $deviceId): JsonResponse
+    {
+        \App\Models\UserDevice::where('user_id', $request->user()->id)
+            ->where('id', $deviceId)
+            ->delete();
+
+        return ApiResponse::success(
+            data: null,
+            message: 'Perangkat berhasil dicabut.'
+        );
+    }
+
     public function removeToken(Request $request): JsonResponse
     {
         $token = (string) $request->input('token');

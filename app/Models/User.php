@@ -27,6 +27,9 @@ class User extends Authenticatable
         'password',
         'avatar',
         'bio',
+        'privacy_last_seen',
+        'privacy_status',
+        'privacy_read_receipts',
     ];
 
     /**
@@ -49,6 +52,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'privacy_read_receipts' => 'boolean',
         ];
     }
 

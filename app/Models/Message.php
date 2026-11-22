@@ -24,6 +24,12 @@ class Message extends Model
         'conversation_id',
         'sender_id',
         'body',
+        'is_edited',
+        'edited_at',
+        'original_body',
+        'ciphertext',
+        'iv',
+        'key_id',
         'type',
         'read_at',
         'attachment_url',
@@ -44,6 +50,8 @@ class Message extends Model
     {
         return [
             'read_at' => 'datetime',
+            'is_edited' => 'boolean',
+            'edited_at' => 'datetime',
             'is_deleted_for_everyone' => 'boolean',
             'is_forwarded' => 'boolean',
             'deleted_for_user_ids' => 'array',

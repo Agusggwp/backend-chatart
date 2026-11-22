@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Events\CallIncoming;
+use App\Events\CallSignalSent;
 use App\Events\CallStatusUpdated;
 use App\Models\Call;
 use App\Models\User;
@@ -134,6 +135,23 @@ class CallService
         $this->safeBroadcast(new CallStatusUpdated($call));
 
         return $call;
+    }
+
+    /**
+     * Send WebRTC signal (offer, answer, ice-candidate) to the other participant.
+     */
+    public function sendSignal(User $user, Call $call, string $signalType, mixed $signalData): void
+    {
+        $isCaller = (int) $call->caller_id === (int) $user->id;
+        $isReceiver = (int) $call->receiver_id === (int) $user->id;
+
+        if (! $isCaller && ! $isReceiver) {
+            throw new AccessDeniedHttpException('Anda bukan peserta panggilan ini.');
+        }
+
+        $targetUserId = $isCaller ? (int) $call->receiver_id : (int) $call->caller_id;
+
+        $this->safeBroadcast(new CallSignalSent($call, (int) $user->id, $targetUserId, $signalType, $signalData));
     }
 
     private function safeBroadcast(object $event): void

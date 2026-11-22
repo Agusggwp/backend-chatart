@@ -18,12 +18,20 @@ Route::middleware('auth:web')->group(function (): void {
 });
 
 Route::get('/storage/{path}', function (string $path) {
-    $fullPath = storage_path('app/public/' . $path);
+    $cleanPath = ltrim($path, '/');
+    if (str_starts_with($cleanPath, 'storage/')) {
+        $cleanPath = substr($cleanPath, 8);
+    }
+    $fullPath = storage_path('app/public/' . $cleanPath);
+    if (!file_exists($fullPath)) {
+        $fullPath = public_path('storage/' . $cleanPath);
+    }
     if (!file_exists($fullPath)) {
         abort(404);
     }
     return response()->file($fullPath, [
         'Access-Control-Allow-Origin' => '*',
         'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
+        'Cache-Control' => 'public, max-age=86400',
     ]);
 })->where('path', '.*');

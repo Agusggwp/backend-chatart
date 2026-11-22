@@ -36,6 +36,10 @@ class ConversationResource extends JsonResource
             'pinned_at' => $currentUserPivot?->pinned_at ? \Illuminate\Support\Carbon::parse($currentUserPivot->pinned_at)->toIso8601String() : null,
             'is_archived' => (bool) ($currentUserPivot?->is_archived ?? false),
             'archived_at' => $currentUserPivot?->archived_at ? \Illuminate\Support\Carbon::parse($currentUserPivot->archived_at)->toIso8601String() : null,
+            'is_muted' => (bool) ($currentUserPivot?->is_muted ?? false),
+            'muted_until' => $currentUserPivot?->muted_until ? \Illuminate\Support\Carbon::parse($currentUserPivot->muted_until)->toIso8601String() : null,
+            'invite_token' => $this->invite_token,
+            'settings' => $this->settings ?? ['only_admins_message' => false, 'only_admins_edit_info' => false],
             'participants_count' => $this->users->count(),
             'participants' => $this->users->map(fn ($user) => [
                 'id' => $user->id,

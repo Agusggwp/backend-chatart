@@ -62,6 +62,9 @@
                         <button onclick="openCallsModal()" class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2">
                             <i class="fa-solid fa-phone text-emerald-600 w-4"></i> Riwayat Panggilan
                         </button>
+                        <button onclick="openPrivacyModal()" class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2">
+                            <i class="fa-solid fa-user-shield text-blue-500 w-4"></i> Pengaturan Privasi
+                        </button>
                         <div class="border-t border-gray-100 my-1"></div>
                         <form action="{{ route('web.logout') }}" method="POST">
                             @csrf
@@ -156,6 +159,10 @@
                     <button onclick="startVoiceCall()" title="Panggilan Suara" class="hover:text-wa-green transition">
                         <i class="fa-solid fa-phone"></i>
                     </button>
+                    <!-- Video Call Button -->
+                    <button onclick="startVideoCall()" title="Panggilan Video" class="hover:text-wa-green transition">
+                        <i class="fa-solid fa-video"></i>
+                    </button>
                     <!-- In-Chat Search Button -->
                     <button onclick="toggleInChatSearch()" title="Cari Pesan di Chat Ini" class="hover:text-wa-green transition">
                         <i class="fa-solid fa-magnifying-glass"></i>
@@ -220,13 +227,35 @@
                     </div>
                 </div>
 
-                <!-- Textarea Message Input -->
-                <div class="flex-1 bg-white rounded-lg px-4 py-2 shadow-sm border border-wa-border flex items-center">
+                <!-- Normal Text Input Container -->
+                <div id="textInputContainer" class="flex-1 bg-white rounded-lg px-4 py-2 shadow-sm border border-wa-border flex items-center">
                     <textarea id="messageInput" rows="1" placeholder="Ketik pesan..." 
                               onkeydown="handleInputKeyDown(event)"
                               oninput="handleTypingEvent()"
                               class="w-full resize-none max-h-28 text-sm text-gray-800 focus:outline-none bg-transparent"></textarea>
                 </div>
+
+                <!-- Voice Note Recording Bar (Hidden by default) -->
+                <div id="voiceRecordingBar" class="hidden flex-1 bg-red-50 border border-red-200 rounded-lg px-4 py-2 flex items-center justify-between shadow-sm animate-pulse">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-3 h-3 rounded-full bg-red-500 animate-ping"></span>
+                        <span class="text-xs font-bold text-red-700">Merekam:</span>
+                        <span id="voiceRecordDuration" class="font-mono text-xs font-bold text-red-600">00:00</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button onclick="cancelVoiceRecording()" class="text-xs text-gray-500 hover:text-red-600 font-semibold flex items-center gap-1">
+                            <i class="fa-solid fa-trash"></i> Batal
+                        </button>
+                        <button onclick="stopAndSendVoiceRecording()" class="w-7 h-7 rounded-full bg-wa-green hover:bg-emerald-600 text-white flex items-center justify-center text-xs shadow">
+                            <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Voice Note Mic Button -->
+                <button onclick="startVoiceRecording()" id="btnVoiceRecord" title="Rekam Catatan Suara" class="text-wa-muted hover:text-wa-green text-xl transition mb-2">
+                    <i class="fa-solid fa-microphone"></i>
+                </button>
 
                 <!-- Send Button -->
                 <button onclick="sendMessage()" id="btnSend" title="Kirim Pesan" class="w-10 h-10 rounded-full bg-wa-green hover:bg-emerald-600 text-white flex items-center justify-center text-sm shadow transition mb-1 shrink-0">
@@ -411,22 +440,54 @@
     </div>
 </div>
 
-<!-- 5. AUDIO CALL OVERLAY MODAL -->
-<div id="audioCallModal" class="hidden fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4">
-    <div class="bg-gray-900 rounded-2xl shadow-2xl w-80 p-6 flex flex-col items-center text-center text-white relative">
-        <div id="callAvatar" class="w-24 h-24 rounded-full bg-wa-green text-white font-bold text-3xl flex items-center justify-center mb-4 shadow-xl border-4 border-gray-800">
-            ?
+<!-- 5. CALL OVERLAY MODAL (WebRTC Audio & Video) -->
+<div id="callModal" class="hidden fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+    <div class="bg-gray-900 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col items-center text-center text-white relative">
+        <!-- Video Stream Container -->
+        <div id="videoStreamContainer" class="w-full h-80 bg-black relative hidden flex items-center justify-center">
+            <video id="remoteVideo" autoplay playsinline class="w-full h-full object-cover"></video>
+            <video id="localVideo" autoplay playsinline muted class="absolute top-4 right-4 w-28 h-36 object-cover rounded-xl border-2 border-emerald-500 shadow-2xl bg-gray-950"></video>
         </div>
-        <h3 id="callName" class="text-lg font-bold mb-1">Agus Artdevata</h3>
-        <p id="callStatusText" class="text-xs text-emerald-400 font-semibold mb-6 animate-pulse">Memanggil...</p>
-        <div id="callDuration" class="text-sm font-mono text-gray-400 mb-8">00:00</div>
 
-        <div class="flex items-center justify-center gap-6">
-            <button onclick="toggleCallMute()" id="btnCallMute" class="w-12 h-12 rounded-full bg-gray-800 hover:bg-gray-700 text-white flex items-center justify-center text-lg">
+        <!-- Audio Call Avatar Container -->
+        <div id="audioCallContainer" class="p-8 flex flex-col items-center">
+            <div id="callAvatar" class="w-24 h-24 rounded-full bg-wa-green text-white font-bold text-3xl flex items-center justify-center mb-4 shadow-xl border-4 border-gray-800">
+                ?
+            </div>
+            <h3 id="callName" class="text-xl font-bold mb-1">Nama Kontak</h3>
+            <p id="callStatusText" class="text-xs text-emerald-400 font-semibold mb-3 animate-pulse">Menghubungkan...</p>
+            <div id="callDuration" class="text-sm font-mono text-gray-400 mb-2">00:00</div>
+        </div>
+
+        <!-- Controls Toolbar -->
+        <div class="w-full bg-gray-950/80 px-6 py-4 flex items-center justify-center gap-6 border-t border-gray-800">
+            <button onclick="toggleCallMute()" id="btnCallMute" title="Bisu / Aktifkan Mikrofon" class="w-12 h-12 rounded-full bg-gray-800 hover:bg-gray-700 text-white flex items-center justify-center text-lg transition">
                 <i class="fa-solid fa-microphone"></i>
             </button>
-            <button onclick="endVoiceCall()" class="w-14 h-14 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center text-xl shadow-lg">
+            <button onclick="toggleCallVideoTrack()" id="btnCallVideoTrack" title="Nyalakan / Matikan Kamera" class="w-12 h-12 rounded-full bg-gray-800 hover:bg-gray-700 text-white flex items-center justify-center text-lg transition">
+                <i class="fa-solid fa-video"></i>
+            </button>
+            <button onclick="endActiveCall()" title="Akhiri Panggilan" class="w-14 h-14 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center text-xl shadow-lg transition">
                 <i class="fa-solid fa-phone-slash"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 5B. INCOMING CALL MODAL -->
+<div id="incomingCallModal" class="hidden fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4">
+    <div class="bg-gray-900 rounded-3xl shadow-2xl w-80 p-6 flex flex-col items-center text-center text-white relative border border-emerald-500/30">
+        <div id="incomingCallAvatar" class="w-24 h-24 rounded-full bg-wa-green text-white font-bold text-3xl flex items-center justify-center mb-4 shadow-xl border-4 border-emerald-400/40">
+            ?
+        </div>
+        <h3 id="incomingCallName" class="text-lg font-bold mb-1">Nama Kontak</h3>
+        <p id="incomingCallType" class="text-xs text-emerald-400 font-semibold mb-6 animate-pulse">Panggilan Masuk...</p>
+        <div class="flex items-center justify-center gap-8">
+            <button onclick="rejectIncomingCall()" title="Tolak" class="w-14 h-14 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center text-xl shadow-lg">
+                <i class="fa-solid fa-phone-slash"></i>
+            </button>
+            <button onclick="acceptIncomingCall()" title="Terima" class="w-14 h-14 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center text-xl shadow-lg">
+                <i class="fa-solid fa-phone"></i>
             </button>
         </div>
     </div>
@@ -507,6 +568,84 @@
     <img id="lightboxImg" src="" alt="Pratinjau Foto" class="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-2xl">
 </div>
 
+<!-- 10. PRIVACY SETTINGS MODAL -->
+<div id="privacyModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div class="px-5 py-4 bg-wa-green text-white font-bold flex items-center justify-between">
+            <span><i class="fa-solid fa-user-shield mr-2"></i>Pengaturan Privasi</span>
+            <button onclick="closeModal('privacyModal')"><i class="fa-solid fa-xmark text-lg"></i></button>
+        </div>
+        <div class="p-6 space-y-5 text-sm">
+            <div>
+                <label class="block font-semibold text-gray-800 mb-1">Terakhir Dilihat & Online</label>
+                <p class="text-xs text-gray-500 mb-2">Siapa yang dapat melihat kapan Anda terakhir aktif atau saat sedang online.</p>
+                <select id="privacyLastSeenSelect" class="w-full p-2 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-wa-green focus:outline-none">
+                    <option value="everyone">Semua Orang</option>
+                    <option value="contacts">Kontak Saya</option>
+                    <option value="nobody">Tidak Ada</option>
+                </select>
+            </div>
+            <div>
+                <label class="block font-semibold text-gray-800 mb-1">Privasi Status / Cerita</label>
+                <p class="text-xs text-gray-500 mb-2">Siapa yang dapat melihat pembaruan status 24 jam Anda.</p>
+                <select id="privacyStatusSelect" class="w-full p-2 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-wa-green focus:outline-none">
+                    <option value="everyone">Semua Orang</option>
+                    <option value="contacts">Kontak Saya</option>
+                    <option value="nobody">Tidak Ada</option>
+                </select>
+            </div>
+            <div class="flex items-start gap-3 pt-2 border-t border-gray-100">
+                <input type="checkbox" id="privacyReadReceiptsCheck" class="mt-1 rounded text-wa-green focus:ring-wa-green">
+                <div>
+                    <label for="privacyReadReceiptsCheck" class="font-semibold text-gray-800 cursor-pointer">Laporan Dibaca (Centang Biru)</label>
+                    <p class="text-xs text-gray-500">Jika dinonaktifkan, Anda tidak akan mengirim atau menerima tanda terima telah dibaca.</p>
+                </div>
+            </div>
+            <div class="pt-3">
+                <button onclick="savePrivacySettings()" class="w-full py-2.5 bg-wa-green hover:bg-emerald-600 text-white font-semibold rounded-lg text-sm shadow">
+                    Simpan Perubahan
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 11. CONTACT INFO MODAL -->
+<div id="contactInfoModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden text-center">
+        <div class="h-28 bg-wa-green flex items-end justify-center relative">
+            <button onclick="closeModal('contactInfoModal')" class="absolute top-3 right-3 text-white/80 hover:text-white">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+            <div id="contactInfoAvatar" class="w-20 h-20 rounded-full bg-white text-wa-green font-bold text-2xl flex items-center justify-center shadow-lg border-4 border-white translate-y-10">
+                ?
+            </div>
+        </div>
+        <div class="pt-12 pb-6 px-6">
+            <h3 id="contactInfoName" class="text-lg font-bold text-gray-800">Nama Kontak</h3>
+            <p id="contactInfoUsername" class="text-xs text-wa-muted mb-4">@username</p>
+            <div class="bg-gray-50 rounded-lg p-3 text-left space-y-2 mb-4 text-xs">
+                <div>
+                    <span class="text-gray-400 block text-[10px]">BIO</span>
+                    <span id="contactInfoBio" class="text-gray-700 font-medium">Belum ada bio</span>
+                </div>
+                <div>
+                    <span class="text-gray-400 block text-[10px]">STATUS</span>
+                    <span id="contactInfoOnline" class="text-emerald-600 font-semibold">Online</span>
+                </div>
+            </div>
+            <div class="flex items-center justify-center gap-3">
+                <button onclick="closeModal('contactInfoModal'); startVoiceCall();" class="flex-1 py-2 bg-emerald-50 text-wa-green rounded-lg font-semibold text-xs hover:bg-emerald-100 flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-phone"></i> Telepon
+                </button>
+                <button onclick="closeModal('contactInfoModal'); startVideoCall();" class="flex-1 py-2 bg-emerald-50 text-wa-green rounded-lg font-semibold text-xs hover:bg-emerald-100 flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-video"></i> Video
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -578,6 +717,14 @@
 
             userChannel.bind('call.incoming', (data) => {
                 showIncomingCallModal(data.call);
+            });
+
+            userChannel.bind('call.status_updated', (data) => {
+                handleCallStatusUpdated(data.call);
+            });
+
+            userChannel.bind('call.signal', (data) => {
+                handleCallSignal(data);
             });
 
             userChannel.bind('message.sent', (data) => {
@@ -867,20 +1014,30 @@
     }
 
     // Render Messages Stream
-    function renderMessages() {
+    function renderMessages(customList = null, highlightTerm = '') {
         const container = document.getElementById('messagesContainer');
-        if (App.messages.length === 0) {
+        const list = customList || App.messages;
+        if (list.length === 0) {
             container.innerHTML = `
                 <div class="h-full flex items-center justify-center text-center text-wa-muted text-xs">
                     <div class="bg-white/80 backdrop-blur-sm px-4 py-2 rounded-lg shadow-sm border border-wa-border">
-                        Belum ada pesan. Mulai obrolan sekarang!
+                        ${highlightTerm ? 'Tidak ada pesan yang cocok dengan "' + escapeHtml(highlightTerm) + '"' : 'Belum ada pesan. Mulai obrolan sekarang!'}
                     </div>
                 </div>`;
             return;
         }
 
         let html = '';
-        App.messages.forEach(m => {
+        if (highlightTerm) {
+            html += `
+                <div class="flex justify-center mb-2">
+                    <span class="bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full shadow-sm font-semibold flex items-center gap-1.5">
+                        <i class="fa-solid fa-magnifying-glass text-[10px]"></i> Menemukan ${list.length} pesan untuk "${escapeHtml(highlightTerm)}"
+                    </span>
+                </div>`;
+        }
+
+        list.forEach(m => {
             const isMine = m.sender_id === App.currentUser.id;
             const isDeleted = m.is_deleted_for_everyone;
             const time = formatTime(m.created_at);
@@ -909,7 +1066,7 @@
                 if (m.type === 'image') {
                     mediaContent = `
                     <div class="mb-1 rounded overflow-hidden cursor-pointer" onclick="openLightbox('${mediaUrl}')">
-                        <img src="${mediaUrl}" class="max-h-64 object-cover rounded hover:opacity-95 transition" onerror="this.onerror=null; if(!this.src.includes('/storage/')) this.src='/storage/' + '${m.attachment_url}'.replace(/^https?:\\/\\/[^\\/]+\\/storage\\//, '');">
+                        <img src="${mediaUrl}" alt="Foto" class="max-h-64 max-w-full object-cover rounded hover:opacity-95 transition" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'flex items-center gap-2 p-3 bg-black/10 rounded text-xs text-gray-700\\'><i class=\\'fa-solid fa-image text-gray-500 text-lg\\'></i><span>Foto tidak dapat dimuat</span></div>';">
                     </div>`;
                 } else if (m.type === 'voice') {
                     mediaContent = `
@@ -1309,97 +1466,589 @@
         toggleDropdown('chatMenuDropdown');
         if (!App.activeConversationId) return;
         try {
-            await fetch(`/api/conversations/${App.activeConversationId}/archive`, {
+            const res = await fetch(`/api/conversations/${App.activeConversationId}/archive`, {
                 method: 'POST',
                 headers: { 'Authorization': 'Bearer ' + App.token, 'Accept': 'application/json' }
             });
-            await loadConversations();
-            selectConversation(App.activeConversationId);
+            const json = await res.json();
+            const isArchived = json.data?.is_archived ?? false;
+
+            const conv = App.conversations.find(c => Number(c.id) === Number(App.activeConversationId));
+            if (conv) {
+                conv.is_archived = isArchived;
+            }
+            if (App.activeConversation) {
+                App.activeConversation.is_archived = isArchived;
+            }
+
+            const btnArchive = document.getElementById('btnArchiveChat');
+            if (btnArchive) {
+                btnArchive.innerHTML = `<i class="fa-solid fa-box-archive text-wa-green w-4"></i> ${isArchived ? 'Buka Arsip Chat' : 'Arsipkan Chat'}`;
+            }
+
+            renderConversations();
+            alert(isArchived ? 'Chat berhasil diarsipkan.' : 'Chat dikeluarkan dari arsip.');
         } catch (e) {
             console.error(e);
         }
     }
 
-    // Block / Unblock Active User
-    async function toggleBlockActiveUser() {
-        toggleDropdown('chatMenuDropdown');
-        const conv = App.activeConversation;
-        if (!conv || !conv.other_user) return;
-        const target = conv.other_user;
-        const endpoint = target.is_blocked ? `/api/users/${target.id}/unblock` : `/api/users/${target.id}/block`;
-        if (!confirm(`${target.is_blocked ? 'Buka blokir' : 'Blokir'} ${target.name}?`)) return;
-
+    async function loadArchivedConversations() {
         try {
-            await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + App.token, 'Accept': 'application/json' }
+            const res = await fetch('/api/conversations/archived', {
+                headers: { 'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN), 'Accept': 'application/json' }
             });
-            alert(`Kontak ${target.name} berhasil ${target.is_blocked ? 'dibuka blokirnya' : 'diblokir'}.`);
-            await loadConversations();
-            selectConversation(App.activeConversationId);
+            const json = await res.json();
+            if (json.data && json.data.conversations) {
+                const archived = json.data.conversations.map(c => ({ ...c, is_archived: true }));
+                archived.forEach(ac => {
+                    const idx = App.conversations.findIndex(c => Number(c.id) === Number(ac.id));
+                    if (idx >= 0) {
+                        App.conversations[idx] = ac;
+                    } else {
+                        App.conversations.push(ac);
+                    }
+                });
+                renderConversations();
+            }
         } catch (e) {
-            alert('Terjadi kesalahan: ' + e);
+            console.error('Failed to load archived conversations:', e);
         }
     }
 
-    // Voice Calling Simulation
+    // Voice Note Recorder (MediaRecorder)
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let voiceRecordTimer = null;
+    let voiceRecordSeconds = 0;
+
+    async function startVoiceRecording() {
+        if (!App.activeConversationId) {
+            alert('Pilih obrolan terlebih dahulu untuk merekam catatan suara.');
+            return;
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            audioChunks = [];
+
+            let options = {};
+            if (typeof MediaRecorder !== 'undefined') {
+                if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+                    options = { mimeType: 'audio/webm;codecs=opus' };
+                } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+                    options = { mimeType: 'audio/webm' };
+                } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
+                    options = { mimeType: 'audio/ogg;codecs=opus' };
+                }
+            }
+
+            mediaRecorder = new MediaRecorder(stream, options);
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) {
+                    audioChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                stream.getTracks().forEach(track => track.stop());
+            };
+
+            mediaRecorder.start(250);
+            voiceRecordSeconds = 0;
+            document.getElementById('voiceRecordDuration').innerText = '00:00';
+            document.getElementById('textInputContainer').classList.add('hidden');
+            document.getElementById('btnVoiceRecord').classList.add('hidden');
+            document.getElementById('btnSend').classList.add('hidden');
+            document.getElementById('voiceRecordingBar').classList.remove('hidden');
+
+            clearInterval(voiceRecordTimer);
+            voiceRecordTimer = setInterval(() => {
+                voiceRecordSeconds++;
+                const m = String(Math.floor(voiceRecordSeconds / 60)).padStart(2, '0');
+                const s = String(voiceRecordSeconds % 60).padStart(2, '0');
+                document.getElementById('voiceRecordDuration').innerText = `${m}:${s}`;
+            }, 1000);
+        } catch (err) {
+            alert('Tidak dapat mengakses mikrofon: ' + err.message);
+        }
+    }
+
+    function cancelVoiceRecording() {
+        clearInterval(voiceRecordTimer);
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+        audioChunks = [];
+        resetVoiceRecordingUI();
+    }
+
+    async function stopAndSendVoiceRecording() {
+        clearInterval(voiceRecordTimer);
+        const duration = voiceRecordSeconds;
+
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.onstop = async () => {
+                const mime = mediaRecorder.mimeType || 'audio/webm';
+                const audioBlob = new Blob(audioChunks, { type: mime });
+                resetVoiceRecordingUI();
+                await uploadVoiceNoteBlob(audioBlob, duration);
+            };
+            mediaRecorder.stop();
+        } else {
+            resetVoiceRecordingUI();
+        }
+    }
+
+    function resetVoiceRecordingUI() {
+        document.getElementById('voiceRecordingBar').classList.add('hidden');
+        document.getElementById('textInputContainer').classList.remove('hidden');
+        document.getElementById('btnVoiceRecord').classList.remove('hidden');
+        document.getElementById('btnSend').classList.remove('hidden');
+    }
+
+    async function uploadVoiceNoteBlob(blob, duration) {
+        if (!App.activeConversationId) return;
+
+        const formData = new FormData();
+        const ext = blob.type.includes('ogg') ? 'ogg' : 'webm';
+        formData.append('attachment', blob, `voice_note_${Date.now()}.${ext}`);
+        formData.append('duration', Math.max(1, duration));
+        if (App.replyingMessage) {
+            formData.append('reply_to_id', App.replyingMessage.id);
+            cancelReply();
+        }
+
+        try {
+            const res = await fetch(`/api/conversations/${App.activeConversationId}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN),
+                    'Accept': 'application/json'
+                },
+                body: formData
+            });
+            const json = await res.json();
+            if (json.data && json.data.message) {
+                App.messages.push(json.data.message);
+                renderMessages();
+                loadConversations(true);
+            }
+        } catch (e) {
+            alert('Gagal mengirim catatan suara: ' + e);
+        }
+    }
+
+    // WebRTC Audio & Video Calling Implementation
+    let activeCall = null;
+    let peerConnection = null;
+    let localStream = null;
+    let callTimer = null;
+    let callSeconds = 0;
+    let isCallMuted = false;
+    let isVideoMuted = false;
+    let pendingIncomingCall = null;
+
+    const rtcConfig = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+    };
+
     function startVoiceCall() {
+        initiateWebRTCCall('audio');
+    }
+
+    function startVideoCall() {
+        initiateWebRTCCall('video');
+    }
+
+    async function initiateWebRTCCall(type = 'audio') {
         const conv = App.activeConversation;
         if (!conv || !conv.other_user) {
-            alert('Panggilan suara hanya tersedia untuk obrolan privat.');
+            alert('Panggilan hanya tersedia untuk obrolan privat.');
             return;
         }
 
         const other = conv.other_user;
+        const isVideo = type === 'video';
+
         document.getElementById('callName').innerText = other.name;
         document.getElementById('callAvatar').innerText = other.name.substring(0, 2).toUpperCase();
-        document.getElementById('callStatusText').innerText = 'Menghubungkan...';
-        openModal('audioCallModal');
+        document.getElementById('callStatusText').innerText = `Memanggil (${isVideo ? 'Video' : 'Suara'})...`;
+        document.getElementById('callDuration').innerText = '00:00';
 
-        // Start Call Timer
-        App.callDurationSeconds = 0;
-        clearInterval(App.callTimer);
-        App.callTimer = setInterval(() => {
-            App.callDurationSeconds++;
-            const m = String(Math.floor(App.callDurationSeconds / 60)).padStart(2, '0');
-            const s = String(App.callDurationSeconds % 60).padStart(2, '0');
-            document.getElementById('callDuration').innerText = `${m}:${s}`;
-        }, 1000);
+        if (isVideo) {
+            document.getElementById('videoStreamContainer').classList.remove('hidden');
+            document.getElementById('btnCallVideoTrack').classList.remove('hidden');
+        } else {
+            document.getElementById('videoStreamContainer').classList.add('hidden');
+            document.getElementById('btnCallVideoTrack').classList.add('hidden');
+        }
 
-        // Notify API
-        fetch('/api/calls', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer ' + App.token,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify({
-                receiver_id: other.id,
-                type: 'audio',
-                conversation_id: App.activeConversationId
-            })
-        });
+        openModal('callModal');
+
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: isVideo ? { width: { ideal: 640 }, height: { ideal: 480 } } : false
+            });
+
+            if (isVideo) {
+                const localVid = document.getElementById('localVideo');
+                localVid.srcObject = localStream;
+                localVid.classList.remove('hidden');
+            }
+
+            const res = await fetch('/api/calls', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN),
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    receiver_id: other.id,
+                    type: type,
+                    conversation_id: App.activeConversationId
+                })
+            });
+
+            const json = await res.json();
+            if (!res.ok) {
+                throw new Error(json.message || 'Gagal memulai panggilan.');
+            }
+
+            activeCall = json.data.call;
+            setupPeerConnection(activeCall.id, isVideo);
+
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            sendCallSignal(activeCall.id, 'offer', offer);
+            startCallTimer();
+        } catch (err) {
+            alert('Panggilan gagal: ' + err.message);
+            cleanupCallState();
+        }
     }
 
-    function endVoiceCall() {
-        clearInterval(App.callTimer);
-        closeModal('audioCallModal');
+    function setupPeerConnection(callId, isVideo = false) {
+        if (peerConnection) {
+            peerConnection.close();
+        }
+
+        peerConnection = new RTCPeerConnection(rtcConfig);
+
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                sendCallSignal(callId, 'ice-candidate', event.candidate);
+            }
+        };
+
+        peerConnection.ontrack = (event) => {
+            const remoteVid = document.getElementById('remoteVideo');
+            if (remoteVid) {
+                remoteVid.srcObject = event.streams[0];
+                remoteVid.classList.remove('hidden');
+            }
+            document.getElementById('callStatusText').innerText = 'Terhubung';
+        };
+
+        peerConnection.oniceconnectionstatechange = () => {
+            if (peerConnection.iceConnectionState === 'connected') {
+                document.getElementById('callStatusText').innerText = 'Terhubung';
+            } else if (['disconnected', 'failed', 'closed'].includes(peerConnection.iceConnectionState)) {
+                document.getElementById('callStatusText').innerText = 'Panggilan terputus';
+            }
+        };
+    }
+
+    async function sendCallSignal(callId, signalType, signalData) {
+        try {
+            await fetch(`/api/calls/${callId}/signal`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN),
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    signal_type: signalType,
+                    signal_data: signalData
+                })
+            });
+        } catch (e) {
+            console.error('Failed to send call signal:', e);
+        }
+    }
+
+    function showIncomingCallModal(call) {
+        pendingIncomingCall = call;
+        const caller = call.caller || call.other_user || {};
+        document.getElementById('incomingCallName').innerText = caller.name || 'Pengguna';
+        document.getElementById('incomingCallAvatar').innerText = (caller.name || '?').substring(0, 2).toUpperCase();
+        document.getElementById('incomingCallType').innerText = call.type === 'video' ? 'Panggilan Video Masuk...' : 'Panggilan Suara Masuk...';
+        openModal('incomingCallModal');
+    }
+
+    async function acceptIncomingCall() {
+        if (!pendingIncomingCall) return;
+        const call = pendingIncomingCall;
+        pendingIncomingCall = null;
+        closeModal('incomingCallModal');
+
+        activeCall = call;
+        const isVideo = call.type === 'video';
+        const caller = call.caller || call.other_user || {};
+
+        document.getElementById('callName').innerText = caller.name || 'Panggilan';
+        document.getElementById('callAvatar').innerText = (caller.name || '?').substring(0, 2).toUpperCase();
+        document.getElementById('callStatusText').innerText = 'Menghubungkan...';
+        document.getElementById('callDuration').innerText = '00:00';
+
+        if (isVideo) {
+            document.getElementById('videoStreamContainer').classList.remove('hidden');
+            document.getElementById('btnCallVideoTrack').classList.remove('hidden');
+        } else {
+            document.getElementById('videoStreamContainer').classList.add('hidden');
+            document.getElementById('btnCallVideoTrack').classList.add('hidden');
+        }
+
+        openModal('callModal');
+
+        try {
+            await fetch(`/api/calls/${call.id}/accept`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN), 'Accept': 'application/json' }
+            });
+
+            localStream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: isVideo ? { width: { ideal: 640 }, height: { ideal: 480 } } : false
+            });
+
+            if (isVideo) {
+                const localVid = document.getElementById('localVideo');
+                localVid.srcObject = localStream;
+                localVid.classList.remove('hidden');
+            }
+
+            setupPeerConnection(call.id, isVideo);
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+
+            startCallTimer();
+        } catch (err) {
+            alert('Gagal menerima panggilan: ' + err.message);
+            cleanupCallState();
+        }
+    }
+
+    async function rejectIncomingCall() {
+        if (!pendingIncomingCall) return;
+        const call = pendingIncomingCall;
+        pendingIncomingCall = null;
+        closeModal('incomingCallModal');
+
+        try {
+            await fetch(`/api/calls/${call.id}/reject`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN), 'Accept': 'application/json' }
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function handleCallSignal(data) {
+        if (!activeCall || Number(data.call_id) !== Number(activeCall.id)) return;
+
+        try {
+            if (data.signal_type === 'offer') {
+                if (!peerConnection) {
+                    setupPeerConnection(activeCall.id, activeCall.type === 'video');
+                }
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal_data));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                sendCallSignal(activeCall.id, 'answer', answer);
+            } else if (data.signal_type === 'answer') {
+                if (peerConnection) {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal_data));
+                }
+            } else if (data.signal_type === 'ice-candidate') {
+                if (peerConnection && data.signal_data) {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(data.signal_data));
+                }
+            }
+        } catch (e) {
+            console.error('Error handling WebRTC signal:', e);
+        }
+    }
+
+    function handleCallStatusUpdated(call) {
+        if (!call) return;
+        if (activeCall && Number(call.id) === Number(activeCall.id)) {
+            if (['ended', 'rejected', 'missed'].includes(call.status)) {
+                cleanupCallState();
+            } else if (call.status === 'accepted') {
+                document.getElementById('callStatusText').innerText = 'Terhubung';
+            }
+        }
+    }
+
+    async function endActiveCall() {
+        if (!activeCall) {
+            cleanupCallState();
+            return;
+        }
+
+        const callId = activeCall.id;
+        cleanupCallState();
+
+        try {
+            await fetch(`/api/calls/${callId}/end`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN), 'Accept': 'application/json' }
+            });
+        } catch (e) {
+            console.error('Failed to end call:', e);
+        }
+    }
+
+    function cleanupCallState() {
+        clearInterval(callTimer);
+        callSeconds = 0;
+        if (localStream) {
+            localStream.getTracks().forEach(t => t.stop());
+            localStream = null;
+        }
+        if (peerConnection) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+        activeCall = null;
+        closeModal('callModal');
+        closeModal('incomingCallModal');
     }
 
     function toggleCallMute() {
-        const btn = document.getElementById('btnCallMute');
-        btn.classList.toggle('bg-red-600');
+        if (!localStream) return;
+        const audioTracks = localStream.getAudioTracks();
+        if (audioTracks.length > 0) {
+            isCallMuted = !isCallMuted;
+            audioTracks[0].enabled = !isCallMuted;
+            const btn = document.getElementById('btnCallMute');
+            if (isCallMuted) {
+                btn.className = 'w-12 h-12 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center text-lg transition';
+                btn.innerHTML = '<i class="fa-solid fa-microphone-slash"></i>';
+            } else {
+                btn.className = 'w-12 h-12 rounded-full bg-gray-800 hover:bg-gray-700 text-white flex items-center justify-center text-lg transition';
+                btn.innerHTML = '<i class="fa-solid fa-microphone"></i>';
+            }
+        }
+    }
+
+    function toggleCallVideoTrack() {
+        if (!localStream) return;
+        const videoTracks = localStream.getVideoTracks();
+        if (videoTracks.length > 0) {
+            isVideoMuted = !isVideoMuted;
+            videoTracks[0].enabled = !isVideoMuted;
+            const btn = document.getElementById('btnCallVideoTrack');
+            if (isVideoMuted) {
+                btn.className = 'w-12 h-12 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center text-lg transition';
+                btn.innerHTML = '<i class="fa-solid fa-video-slash"></i>';
+            } else {
+                btn.className = 'w-12 h-12 rounded-full bg-gray-800 hover:bg-gray-700 text-white flex items-center justify-center text-lg transition';
+                btn.innerHTML = '<i class="fa-solid fa-video"></i>';
+            }
+        }
+    }
+
+    function startCallTimer() {
+        callSeconds = 0;
+        clearInterval(callTimer);
+        callTimer = setInterval(() => {
+            callSeconds++;
+            const m = String(Math.floor(callSeconds / 60)).padStart(2, '0');
+            const s = String(callSeconds % 60).padStart(2, '0');
+            document.getElementById('callDuration').innerText = `${m}:${s}`;
+        }, 1000);
+    }
+
+    // Privacy Settings Functions
+    async function openPrivacyModal() {
+        toggleDropdown('sidebarMenuDropdown');
+        try {
+            const res = await fetch('/api/profile/privacy', {
+                headers: { 'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN), 'Accept': 'application/json' }
+            });
+            const json = await res.json();
+            if (json.data) {
+                document.getElementById('privacyLastSeenSelect').value = json.data.privacy_last_seen || 'everyone';
+                document.getElementById('privacyStatusSelect').value = json.data.privacy_status || 'everyone';
+                document.getElementById('privacyReadReceiptsCheck').checked = Boolean(json.data.privacy_read_receipts ?? true);
+            }
+            openModal('privacyModal');
+        } catch (e) {
+            console.error('Failed to load privacy settings:', e);
+            openModal('privacyModal');
+        }
+    }
+
+    async function savePrivacySettings() {
+        const lastSeen = document.getElementById('privacyLastSeenSelect').value;
+        const status = document.getElementById('privacyStatusSelect').value;
+        const readReceipts = document.getElementById('privacyReadReceiptsCheck').checked;
+
+        try {
+            const res = await fetch('/api/profile/privacy', {
+                method: 'PUT',
+                headers: {
+                    'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN),
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    privacy_last_seen: lastSeen,
+                    privacy_status: status,
+                    privacy_read_receipts: readReceipts
+                })
+            });
+            const json = await res.json();
+            if (res.ok) {
+                closeModal('privacyModal');
+                alert('Pengaturan privasi berhasil disimpan.');
+            } else {
+                alert('Gagal menyimpan: ' + (json.message || 'Terjadi kesalahan.'));
+            }
+        } catch (e) {
+            alert('Terjadi kesalahan saat menyimpan pengaturan privasi: ' + e);
+        }
     }
 
     // UI Utilities & Filters
-    function setFilter(filter) {
+    async function setFilter(filter) {
         App.currentFilter = filter;
         document.querySelectorAll('.filter-pill').forEach(el => {
             el.className = 'filter-pill px-3 py-1 rounded-full font-semibold text-gray-600 hover:bg-gray-200';
         });
         document.getElementById('filter-' + filter).className = 'filter-pill px-3 py-1 rounded-full font-semibold bg-wa-green text-white';
-        renderConversations();
+
+        if (filter === 'archived') {
+            await loadArchivedConversations();
+        } else {
+            renderConversations();
+        }
     }
 
     function filterConversations(keyword) {
@@ -1454,11 +2103,27 @@
     }
 
     function normalizeMediaUrl(url) {
-        if (!url) return '';
-        if (/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/storage\/(.+)$/i.test(url)) {
-            return window.location.origin + '/storage/' + url.replace(/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/storage\//i, '');
+        if (!url || typeof url !== 'string') return '';
+        let trimmed = url.trim();
+        if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+            if (!trimmed.startsWith('/')) {
+                trimmed = '/' + trimmed;
+            }
+            if (!trimmed.startsWith('/storage/')) {
+                trimmed = '/storage' + trimmed;
+            }
+            return window.location.origin + trimmed;
         }
-        return url;
+        try {
+            const parsed = new URL(trimmed);
+            if (parsed.pathname.includes('/storage/')) {
+                const storagePath = parsed.pathname.substring(parsed.pathname.indexOf('/storage/'));
+                return window.location.origin + storagePath;
+            }
+        } catch (e) {
+            // ignore
+        }
+        return trimmed;
     }
 
     async function loadStarredMessages() {
@@ -1639,6 +2304,137 @@
                     <p class="text-2xl font-bold max-w-sm">${caption}</p>
                     <div class="text-xs text-white/80 mt-4">${author}</div>
                 </div>`;
+        }
+    }
+
+    // View Active Contact Information
+    function viewActiveContactInfo() {
+        const conv = App.activeConversation;
+        if (!conv) return;
+
+        if (conv.is_group) {
+            alert(`Grup: ${conv.display_name || conv.name}\nAnggota: ${conv.participants_count || 'Beberapa'} orang`);
+            return;
+        }
+
+        const user = conv.other_user;
+        if (!user) return;
+
+        document.getElementById('contactInfoAvatar').innerText = (user.name || '?').substring(0, 2).toUpperCase();
+        document.getElementById('contactInfoName').innerText = user.name || 'Kontak';
+        document.getElementById('contactInfoUsername').innerText = '@' + (user.username || '');
+        document.getElementById('contactInfoBio').innerText = user.bio || 'Belum ada bio.';
+        document.getElementById('contactInfoOnline').innerText = user.is_online ? 'Sedang Online' : (user.last_seen_at ? 'Terakhir dilihat ' + formatTime(user.last_seen_at) : 'Offline');
+        document.getElementById('contactInfoOnline').className = user.is_online ? 'text-emerald-600 font-semibold' : 'text-gray-500 font-medium';
+
+        openModal('contactInfoModal');
+    }
+
+    // Toggle In-Chat Search Bar
+    function toggleInChatSearch() {
+        const bar = document.getElementById('inChatSearchBar');
+        bar.classList.toggle('hidden');
+        if (!bar.classList.contains('hidden')) {
+            const input = document.getElementById('inChatSearchInput');
+            input.value = '';
+            input.focus();
+        } else {
+            renderMessages();
+        }
+    }
+
+    // In-Chat Message Search
+    let inChatSearchTimer = null;
+    function searchMessagesInChat(query) {
+        clearTimeout(inChatSearchTimer);
+        inChatSearchTimer = setTimeout(async () => {
+            query = (query || '').trim();
+            if (!query) {
+                renderMessages();
+                return;
+            }
+
+            if (!App.activeConversationId) return;
+
+            try {
+                const res = await fetch(`/api/conversations/${App.activeConversationId}/search?q=${encodeURIComponent(query)}`, {
+                    headers: { 'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN), 'Accept': 'application/json' }
+                });
+                const json = await res.json();
+                if (json.data && json.data.messages) {
+                    renderMessages(json.data.messages, query);
+                } else {
+                    const filtered = App.messages.filter(m => (m.body || '').toLowerCase().includes(query.toLowerCase()));
+                    renderMessages(filtered, query);
+                }
+            } catch (e) {
+                const filtered = App.messages.filter(m => (m.body || '').toLowerCase().includes(query.toLowerCase()));
+                renderMessages(filtered, query);
+            }
+        }, 250);
+    }
+
+    // Block / Unblock User from Active Chat Menu
+    async function toggleBlockActiveUser() {
+        toggleDropdown('chatMenuDropdown');
+        const conv = App.activeConversation;
+        if (!conv || !conv.other_user) return;
+        const target = conv.other_user;
+        const isBlocked = Boolean(target.is_blocked);
+        const action = isBlocked ? 'unblock' : 'block';
+        if (!confirm(`${isBlocked ? 'Buka blokir' : 'Blokir'} kontak ${target.name}?`)) return;
+
+        try {
+            const res = await fetch(`/api/users/${target.id}/${action}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN),
+                    'Accept': 'application/json'
+                }
+            });
+            const json = await res.json();
+            target.is_blocked = !isBlocked;
+            alert(json.message || `Kontak berhasil ${isBlocked ? 'dibuka blokirnya' : 'diblokir'}.`);
+
+            const btnBlock = document.getElementById('btnBlockUser');
+            if (btnBlock) {
+                btnBlock.innerHTML = `<i class="fa-solid fa-ban w-4"></i> ${target.is_blocked ? 'Buka Blokir Kontak' : 'Blokir Kontak'}`;
+            }
+            await loadConversations();
+            if (App.activeConversationId) {
+                selectConversation(App.activeConversationId);
+            }
+        } catch (e) {
+            alert('Gagal mengubah status blokir: ' + e);
+        }
+    }
+
+    // Filter User list in New Chat Modal
+    function filterNewChatUsers(query) {
+        query = (query || '').toLowerCase().trim();
+        const items = document.querySelectorAll('#newChatUsersList > div');
+        items.forEach(el => {
+            const text = el.innerText.toLowerCase();
+            el.style.display = text.includes(query) ? 'flex' : 'none';
+        });
+    }
+
+    // Unblock User from Blocked Contacts Modal
+    async function unblockUser(userId, userName) {
+        if (!confirm(`Buka blokir kontak ${userName}?`)) return;
+        try {
+            const res = await fetch(`/api/users/${userId}/unblock`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + (App.token || window.SANCTUM_TOKEN),
+                    'Accept': 'application/json'
+                }
+            });
+            const json = await res.json();
+            alert(json.message || `Kontak ${userName} berhasil dibuka blokirnya.`);
+            window.location.reload();
+        } catch (e) {
+            alert('Gagal membuka blokir: ' + e);
         }
     }
 </script>

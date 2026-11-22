@@ -4,9 +4,11 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CallController;
 use App\Http\Controllers\Api\ConversationController;
 use App\Http\Controllers\Api\DeviceController;
+use App\Http\Controllers\Api\E2eeController;
 use App\Http\Controllers\Api\GroupController;
 use App\Http\Controllers\Api\MessageController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\StatusController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
@@ -35,6 +37,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/profile', [ProfileController::class, 'show']);
         Route::put('/profile', [ProfileController::class, 'update']);
         Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar']);
+        Route::get('/profile/privacy', [ProfileController::class, 'privacy']);
+        Route::put('/profile/privacy', [ProfileController::class, 'updatePrivacy']);
 
         // Phase 10: Blokir Kontak
         Route::get('/users/blocked', [UserController::class, 'blockedUsers']);
@@ -50,9 +54,14 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/conversations/{conversation}', [ConversationController::class, 'show']);
         Route::post('/conversations/{conversation}/pin', [ConversationController::class, 'togglePin']);
         Route::post('/conversations/{conversation}/archive', [ConversationController::class, 'toggleArchive']);
+        Route::post('/conversations/{conversation}/mute', [ConversationController::class, 'mute']);
+        Route::post('/conversations/{conversation}/unmute', [ConversationController::class, 'unmute']);
+        Route::post('/conversations/{conversation}/clear', [ConversationController::class, 'clear']);
+        Route::get('/conversations/{conversation}/export', [ConversationController::class, 'export']);
 
         Route::get('/conversations/{conversation}/messages', [MessageController::class, 'index']);
         Route::post('/conversations/{conversation}/messages', [MessageController::class, 'store']);
+        Route::put('/conversations/{conversation}/messages/{message}', [MessageController::class, 'update']);
         Route::delete('/conversations/{conversation}/messages/{message}', [MessageController::class, 'destroy']);
         Route::post('/conversations/{conversation}/read', [MessageController::class, 'markAsRead']);
         Route::post('/conversations/{conversation}/typing', [MessageController::class, 'typing']);
@@ -64,6 +73,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/groups/{conversation}/members', [GroupController::class, 'addMembers']);
         Route::delete('/groups/{conversation}/members/{user}', [GroupController::class, 'removeMember']);
         Route::post('/groups/{conversation}/leave', [GroupController::class, 'leave']);
+        Route::post('/groups/{conversation}/invite-token', [GroupController::class, 'generateInviteToken']);
+        Route::post('/groups/join-invite/{token}', [GroupController::class, 'joinByInviteToken']);
+        Route::put('/groups/{conversation}/permissions', [GroupController::class, 'updatePermissions']);
 
         // Phase 5: Voice Calls & Device Push Tokens
         Route::get('/calls', [CallController::class, 'index']);
@@ -71,9 +83,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/calls/{call}/accept', [CallController::class, 'accept']);
         Route::post('/calls/{call}/reject', [CallController::class, 'reject']);
         Route::post('/calls/{call}/end', [CallController::class, 'end']);
+        Route::post('/calls/{call}/signal', [CallController::class, 'signal']);
 
         Route::post('/devices/token', [DeviceController::class, 'registerToken']);
         Route::delete('/devices/token', [DeviceController::class, 'removeToken']);
+        Route::get('/devices', [DeviceController::class, 'index']);
+        Route::delete('/devices/{device}', [DeviceController::class, 'destroy']);
 
         // Phase 7: Status / Stories (Pembaruan Status 24 Jam)
         Route::get('/statuses', [StatusController::class, 'index']);
@@ -93,5 +108,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         // Phase 10: Teruskan Pesan (Forward Messages)
         Route::post('/messages/forward', [MessageController::class, 'forward']);
+
+        // Phase 11 & 12: Laporan & Kunci E2EE
+        Route::post('/reports', [ReportController::class, 'store']);
+        Route::post('/e2ee/keys', [E2eeController::class, 'store']);
+        Route::get('/e2ee/keys/{user}', [E2eeController::class, 'show']);
     });
 });

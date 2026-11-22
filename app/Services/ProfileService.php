@@ -30,6 +30,30 @@ class ProfileService
             'username',
             'bio',
             'phone',
+            'privacy_last_seen',
+            'privacy_status',
+            'privacy_read_receipts',
+        ]));
+
+        if ($allowed !== []) {
+            $user->fill($allowed);
+            $user->save();
+        }
+
+        return $user->fresh()->load('presence');
+    }
+
+    /**
+     * Update user privacy settings.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function updatePrivacySettings(User $user, array $data): User
+    {
+        $allowed = array_intersect_key($data, array_flip([
+            'privacy_last_seen',
+            'privacy_status',
+            'privacy_read_receipts',
         ]));
 
         if ($allowed !== []) {

@@ -30,6 +30,23 @@ class StatusService
         $myStatuses = $activeStatuses->where('user_id', $currentUser->id)->values();
 
         $otherGrouped = $activeStatuses->where('user_id', '!=', $currentUser->id)
+            ->filter(function (Status $s) use ($currentUser) {
+                $author = $s->user;
+                if (! $author) return false;
+                $privacy = $author->privacy_status ?? 'everyone';
+                if ($privacy === 'nobody') {
+                    return false;
+                }
+                if ($privacy === 'contacts') {
+                    return \App\Models\ConversationParticipant::where('user_id', $author->id)
+                        ->whereIn('conversation_id', function ($query) use ($currentUser) {
+                            $query->select('conversation_id')
+                                ->from('conversation_participants')
+                                ->where('user_id', $currentUser->id);
+                        })->exists();
+                }
+                return true;
+            })
             ->groupBy('user_id')
             ->map(function (Collection $userStatuses) use ($currentUser) {
                 $user = $userStatuses->first()->user;

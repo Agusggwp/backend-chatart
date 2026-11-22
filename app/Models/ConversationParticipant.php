@@ -22,6 +22,9 @@ class ConversationParticipant extends Model
         'pinned_at',
         'is_archived',
         'archived_at',
+        'is_muted',
+        'muted_until',
+        'cleared_at',
         'last_read_at',
     ];
 
@@ -35,6 +38,9 @@ class ConversationParticipant extends Model
             'pinned_at' => 'datetime',
             'is_archived' => 'boolean',
             'archived_at' => 'datetime',
+            'is_muted' => 'boolean',
+            'muted_until' => 'datetime',
+            'cleared_at' => 'datetime',
             'last_read_at' => 'datetime',
         ];
     }

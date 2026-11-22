@@ -38,6 +38,9 @@ class ProfileResource extends JsonResource
                 ]
             ),
             'email_verified_at' => $this->email_verified_at?->toIso8601String(),
+            'privacy_last_seen' => $this->privacy_last_seen ?? 'everyone',
+            'privacy_status' => $this->privacy_status ?? 'everyone',
+            'privacy_read_receipts' => (bool) ($this->privacy_read_receipts ?? true),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

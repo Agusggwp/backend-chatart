@@ -59,6 +59,23 @@ class MessageController extends Controller
         );
     }
 
+    public function update(\App\Http\Requests\Chat\EditMessageRequest $request, Conversation $conversation, Message $message): JsonResponse
+    {
+        $updated = $this->chatService->editMessage(
+            user: $request->user(),
+            conversation: $conversation,
+            message: $message,
+            newBody: $request->validated('body'),
+        );
+
+        return ApiResponse::success(
+            data: [
+                'message' => new MessageResource($updated),
+            ],
+            message: 'Pesan berhasil diperbarui.'
+        );
+    }
+
     public function destroy(DeleteMessageRequest $request, Conversation $conversation, Message $message): JsonResponse
     {
         $deleted = $this->chatService->deleteMessage(

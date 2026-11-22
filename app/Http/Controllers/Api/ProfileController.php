@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Profile\UpdatePrivacyRequest;
 use App\Http\Requests\Profile\UpdateProfileRequest;
 use App\Http\Requests\Profile\UploadAvatarRequest;
 use App\Http\Resources\ProfileResource;
@@ -50,6 +51,37 @@ class ProfileController extends Controller
                 'user' => new ProfileResource($user),
             ],
             message: 'Foto profil berhasil diperbarui.'
+        );
+    }
+
+    public function privacy(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        return ApiResponse::success(
+            data: [
+                'privacy_last_seen' => $user->privacy_last_seen ?? 'everyone',
+                'privacy_status' => $user->privacy_status ?? 'everyone',
+                'privacy_read_receipts' => (bool) ($user->privacy_read_receipts ?? true),
+            ],
+            message: 'Pengaturan privasi berhasil diambil.'
+        );
+    }
+
+    public function updatePrivacy(UpdatePrivacyRequest $request): JsonResponse
+    {
+        $user = $this->profileService->updatePrivacySettings($request->user(), $request->validated());
+
+        return ApiResponse::success(
+            data: [
+                'user' => new ProfileResource($user),
+                'privacy' => [
+                    'privacy_last_seen' => $user->privacy_last_seen,
+                    'privacy_status' => $user->privacy_status,
+                    'privacy_read_receipts' => (bool) $user->privacy_read_receipts,
+                ],
+            ],
+            message: 'Pengaturan privasi berhasil diperbarui.'
         );
     }
 }

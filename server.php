@@ -7,7 +7,8 @@
  * All /api/* and dynamic routes are delegated to Laravel's index.php and HandleCors.
  */
 
-$publicPath = getcwd();
+$publicPath = is_dir(__DIR__ . '/public') ? __DIR__ . '/public' : getcwd();
+$storagePath = is_dir(__DIR__ . '/storage/app/public') ? __DIR__ . '/storage/app/public' : dirname($publicPath) . '/storage/app/public';
 
 $uri = urldecode(
     parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?? ''

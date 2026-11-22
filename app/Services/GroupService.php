@@ -204,6 +204,60 @@ class GroupService
         }
     }
 
+    public function generateInviteToken(User $actor, Conversation $conversation): string
+    {
+        $this->ensureGroupAdmin($actor, $conversation);
+
+        $token = \Illuminate\Support\Str::random(32);
+        $conversation->update([
+            'invite_token' => $token,
+            'invite_token_created_at' => now(),
+        ]);
+
+        return $token;
+    }
+
+    public function joinByInviteToken(string $token, User $user): Conversation
+    {
+        $conversation = Conversation::where('invite_token', $token)
+            ->where('type', Conversation::TYPE_GROUP)
+            ->first();
+
+        if (! $conversation) {
+            throw new \Symfony\Component\HttpKernel\Exception\NotFoundHttpException('Tautan undangan grup tidak valid atau telah kadaluarsa.');
+        }
+
+        $isPart = $conversation->isParticipant((int) $user->id);
+        if ($isPart) {
+            return $conversation;
+        }
+
+        $p = ConversationParticipant::create([
+            'conversation_id' => $conversation->id,
+            'user_id' => (int) $user->id,
+            'role' => ConversationParticipant::ROLE_MEMBER,
+        ]);
+
+        $allIds = $conversation->participants()->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+        $this->safeBroadcast(new GroupUpdated($conversation->id, $allIds, 'members_added'));
+
+        return $conversation;
+    }
+
+    public function updatePermissions(User $actor, Conversation $conversation, array $permissions): Conversation
+    {
+        $this->ensureGroupAdmin($actor, $conversation);
+
+        $currentSettings = $conversation->settings ?? [];
+        $conversation->settings = array_merge($currentSettings, $permissions);
+        $conversation->save();
+
+        $allIds = $conversation->participants()->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+        $this->safeBroadcast(new GroupUpdated($conversation->id, $allIds, 'updated'));
+
+        return $conversation;
+    }
+
     private function ensureGroupAdmin(User $actor, Conversation $conversation): void
     {
         if (! $conversation->isGroup()) {
